@@ -18,6 +18,10 @@ constexpr std::size_t kMbapHeaderSize = 7;
 constexpr std::size_t kMaxPduSize = 253;
 
 // ---------------- PDU 构造（不含链路帧头，TCP 与 RTU 复用） ----------------
+// 位读取（0x01/0x02）在阶段 3 补齐：从站模拟器需要它们来验证位区的打包顺序。
+std::vector<uint8_t> buildReadCoils(uint16_t startAddress, uint16_t count);
+std::vector<uint8_t> buildReadDiscreteInputs(uint16_t startAddress, uint16_t count);
+std::vector<uint8_t> buildWriteSingleCoil(uint16_t address, bool value);
 std::vector<uint8_t> buildReadHoldingRegisters(uint16_t startAddress, uint16_t count);
 std::vector<uint8_t> buildReadInputRegisters(uint16_t startAddress, uint16_t count);
 std::vector<uint8_t> buildWriteSingleRegister(uint16_t address, uint16_t value);
@@ -57,6 +61,17 @@ struct ReadRegistersResult {
 };
 
 ReadRegistersResult parseReadRegistersResponse(const Frame& frame, uint16_t expectedCount);
+
+// 位读取（0x01/0x02）响应的解析结果。位在字节里低位在前，与从站的打包方式一致。
+struct ReadBitsResult {
+    bool valid = false;
+    uint8_t functionCode = 0;
+    std::vector<bool> bits;
+    ExceptionCode exception = ExceptionCode::None;
+    std::string error;
+};
+
+ReadBitsResult parseReadBitsResponse(const Frame& frame, uint16_t expectedCount);
 
 struct WriteSingleResult {
     bool valid = false;

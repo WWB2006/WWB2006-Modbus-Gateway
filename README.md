@@ -3,8 +3,8 @@
 工业设备数据采集网关：把现场设备（PLC、电表、仪表）的 Modbus 数据稳定地采集回来，
 做可视化、归档与自动化测试。面向 C++/Qt 工业软件与自动化测试岗位的作品项目。
 
-> 当前进度：**阶段 0（工程骨架）、阶段 1（协议编解码层）、阶段 2（通信层与设备会话）
-> 已完成并通过验证**。后续阶段见文末路线。
+> 当前进度：**阶段 0（工程骨架）、阶段 1（协议编解码层）、阶段 2（通信层与设备会话）、
+> 阶段 3（从站模拟器）已完成并通过验证**。后续阶段见文末路线。
 
 与项目一（Linux epoll 服务器）的联系单独整理在
 [docs/与项目一的对应关系.md](docs/与项目一的对应关系.md)，代码里用 `[与项目一对应]` 注释标注。
@@ -14,6 +14,8 @@
 工业软件的价值不在界面上，而在「把现场设备的数据稳定地拿回来」。本项目按工业现场的真实
 约束设计：设备会掉线、响应会超时、帧会被截断、CRC 会出错、现场会有电磁干扰。
 项目用自研从站模拟器把这些故障全部复现成可重复的用例，因此**不需要真实硬件**也能完成开发与测试。
+从站模拟器（阶段 3）本身也是交付物：它独立成可执行文件，测试脚本可以反复启停它，
+并用 pymodbus / QModMaster / mbpoll 做交叉验证。
 
 ## 技术栈
 
@@ -35,26 +37,30 @@ MyselfModbusGateway/
 |-- .clang-format
 |-- .gitignore
 |-- config/gateway.json          设备与轮询配置样例
+|-- config/slave-simulator.json  从站模拟器配置（寄存器初值）
 |-- docs/
 |   |-- 阶段0-1验收记录.md
 |   |-- 阶段2验收记录.md
+|   |-- 阶段3验收记录.md          含 pymodbus 交叉验证记录
 |   |-- 与项目一的对应关系.md     与 MyselfWebServer 的逐项对照
 |   |-- protocol-matrix.md        功能码与异常码字节序对照表
 |   `-- adr/                      架构决策记录
 |-- include/gateway/
 |   |-- protocol/                 协议层头文件（不依赖 Qt）
 |   |-- transport/                链路抽象、接收缓冲、TCP 链路
-|   `-- device/                   设备配置、会话状态机、设备管理
+|   |-- device/                   设备配置、会话状态机、设备管理
+|   `-- sim/                      从站模拟器（不依赖 Qt）
 |-- src/
 |   |-- protocol/                 Crc16、ModbusFrame、ModbusCodec、ExceptionCode
 |   |-- transport/                TransportInterface、ByteAccumulator、TcpTransport
 |   |-- device/                   DeviceSession、DeviceManager
+|   |-- sim/                      RegisterMap、RequestHandler、SlaveSimulator、配置与入口
 |   |-- main.cpp                  界面入口（阶段 5 前只是一个空窗口）
 |   `-- gateway_cli.cpp           无界面入口
 |-- tests/
-|   |-- portable/                 不依赖 Qt 的协议层与设备层测试（现在就能跑）
+|   |-- portable/                 不依赖 Qt 的测试：协议层、设备层、模拟器（现在就能跑）
 |   `-- unit/                     Qt Test 用例（装好 Qt 后跑）
-`-- scripts/                      构建与验证脚本
+`-- scripts/                      构建与验证脚本，含 verify_simulator.py 交叉验证
 ```
 
 **协议层与设备层都不依赖 Qt**：编解码只接收字节数组，设备会话不持有线程也不读系统时间。
@@ -143,6 +149,37 @@ ctest --test-dir build --output-on-failure
 - `DeviceManager`：多设备注册、启动、时钟分发与结果派发；
 - 链路抽象与设备层均可在无 Qt 环境下用假链路完整验证。
 
+**阶段 3 从站模拟器**
+
+- `RegisterMap`：Modbus 四区寄存器模型（线圈 / 离散输入 / 保持寄存器 / 输入寄存器），
+  四区彼此独立的地址空间，越界与数量超限分别返回 `0x02` / `0x03`；
+- `RequestHandler`：把一条请求 PDU 变成响应 PDU 的纯逻辑，覆盖 `0x01/0x02/0x03/0x04/0x05/0x06/0x0F/0x10`
+  八个功能码与 `0x01`（非法功能）、`0x02`（非法地址）、`0x03`（非法数据值）三类异常；
+  位区按规范以「低位在前」打包；
+- `SlaveSimulator`：Modbus TCP 从站，**不依赖 Qt**（直接用 POSIX / WinSock 套接字），
+  独立可执行文件，可反复启停；单线程 select 轮询，连接数超限与非法帧都有明确处理；
+- `SimulatorConfig`：从 JSON 读寄存器初值（含自研极简 JSON 解析器），
+  便于脚本化构造边界场景；初值地址超出声明区时直接报错而不是静默丢弃；
+- `config/slave-simulator.json`：默认配置样例。
+
+`slave_simulator` 的用法：
+
+```bash
+# 用默认配置启动（监听 127.0.0.1:5020，从站地址 1）
+./build_portable/slave_simulator
+
+# 指定配置；命令行可覆盖端口与从站地址
+./build_portable/slave_simulator path/to/config.json --port 5021 --unit 2
+./build_portable/slave_simulator --quiet          # 不逐条打印请求
+```
+
+启动后可用任一第三方工具连接（这是实现指导要求的交叉验证方式）：
+
+```bash
+pip install pymodbus
+python scripts/verify_simulator.py                # 本项目自带的交叉验证脚本，54 项断言
+```
+
 `config/gateway.json` 的字段与 `DeviceConfig` / `PollPoint` 一一对应：
 
 | 字段 | 类型 | 默认 | 说明 |
@@ -172,6 +209,20 @@ ctest --test-dir build --output-on-failure
 断言 88 项，失败 0 项      （设备层 device_tests）
 结果：全部通过
 ```
+
+阶段 3 的从站模拟器另加 **87 项断言**，并且通过了**第三方实现的交叉验证**：
+
+```
+断言 87 项，失败 0 项      （模拟器 simulator_tests，与主站侧编解码闭环）
+
+用 pymodbus 3.15 交叉验证（scripts/verify_simulator.py）：
+断言 54 项，失败 0 项
+结果：全部通过
+```
+
+交叉验证这一步不能省略。自研主站与自研从站的闭环测试只能证明「两边对规范的理解一致」，
+如果两边一起把字节序理解错了，测试依然全绿。pymodbus 是独立实现，
+它读出的值与预期一致，才说明字节序、位打包顺序、异常码真的是对的。
 
 协议层覆盖的关键用例：
 
@@ -228,7 +279,7 @@ ctest --test-dir build --output-on-failure
 | 阶段 | 内容 | 验证方式 |
 | --- | --- | --- |
 | ~~2~~ | ~~通信层与设备会话~~（已完成） | 假链路驱动 88 项断言通过 |
-| 3 | 从站模拟器（四区寄存器模型、异常码返回） | 无硬件下复现故障 |
+| ~~3~~ | ~~从站模拟器（四区寄存器模型、异常码返回）~~（已完成） | 87 项断言 + pymodbus 交叉验证 54 项 |
 | 4 | 串口 RTU（QSerialPort、虚拟串口） | com0com / socat 上完成读写 |
 | 5 | 界面层（设备面板、寄存器表、日志） | 十个以上界面元素可操作 |
 | 6 | 数据层（SQLite 归档、查询、CSV 导出） | 百万级写入与查询 |
@@ -257,6 +308,16 @@ stage-2: 通信层抽象与设备会话状态机
 - 新增 TransportInterface/ByteAccumulator/TcpTransport/DeviceSession/DeviceManager
 - 超时由外部 tick 驱动，一次只允许一个在途事务
 - 设备层测试 88 项断言通过（假链路驱动）
+```
+
+```
+stage-3: 从站模拟器（四区寄存器模型与异常码）
+
+- 新增 RegisterMap/RequestHandler/SlaveSimulator/SimulatorConfig 与 slave_simulator 可执行文件
+- 不依赖 Qt（POSIX/WinSock 套接字），配置从 JSON 读寄存器初值
+- 补齐主站侧位读取构造与解析（buildReadCoils/buildReadDiscreteInputs/
+  buildWriteSingleCoil/parseReadBitsResponse）
+- 模拟器测试 87 项断言通过；pymodbus 交叉验证 54 项通过
 ```
 
 ## 许可证与来源

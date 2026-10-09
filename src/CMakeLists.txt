@@ -34,6 +34,11 @@ endif()
 add_library(gateway_core STATIC ${CORE_SOURCES})
 target_include_directories(gateway_core PUBLIC ${CMAKE_SOURCE_DIR}/include)
 
+# 阶段 3 的从站模拟器直接用 WinSock（刻意不依赖 Qt），Windows 下要显式链接 ws2_32。
+if (WIN32)
+    target_link_libraries(gateway_core PUBLIC ws2_32)
+endif()
+
 # 协议层与设备层不依赖 Qt；只有接入网络链路时才需要 Qt6::Network。
 if (TARGET Qt6::Network)
     set(_qt_transport_found FALSE)
@@ -59,6 +64,15 @@ endif()
 
 add_executable(gateway_cli gateway_cli.cpp)
 target_link_libraries(gateway_cli PRIVATE gateway_core)
+
+# 阶段 3：从站模拟器。只用 POSIX/WinSock 套接字，不依赖 Qt，
+# 因此没装 Qt 的机器上也能编译并用来做交叉验证。
+add_executable(slave_simulator sim/slave_simulator_main.cpp)
+target_link_libraries(slave_simulator PRIVATE gateway_core)
+
+if (WIN32)
+    target_link_libraries(slave_simulator PRIVATE ws2_32)
+endif()
 
 if (TARGET Qt6::Widgets)
     file(GLOB_RECURSE UI_SOURCES CONFIGURE_DEPENDS ui/*.cpp)

@@ -1,0 +1,48 @@
+{
+  "simulator": {
+    "bindAddress": "127.0.0.1",
+    "port": 5020,
+    "unitId": 1,
+    "supportBroadcast": false,
+    "verbose": true
+  },
+  "registers": {
+    "holding": {
+      "size": 128,
+      "values": {
+        "0": 100,
+        "1": 250,
+        "2": 380,
+        "3": 7,
+        "4": 65535,
+        "10": 1234,
+        "11": 5678,
+        "100": 42
+      }
+    },
+    "input": {
+      "size": 64,
+      "values": {
+        "0": 220,
+        "1": 50,
+        "2": 3
+      }
+    },
+    "coils": {
+      "size": 64,
+      "values": {
+        "0": true,
+        "1": false,
+        "2": true,
+        "10": true
+      }
+    },
+    "discreteInputs": {
+      "size": 32,
+      "values": {
+        "0": true,
+        "3": true
+      }
+    }
+  }
+}

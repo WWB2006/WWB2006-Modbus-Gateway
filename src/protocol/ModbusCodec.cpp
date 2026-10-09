@@ -128,6 +128,42 @@ bool isRegisterFunction(uint8_t functionCode) {
 
 // ---------------------------------------------------------------- PDU 构造
 
+std::vector<uint8_t> buildReadCoils(uint16_t startAddress, uint16_t count) {
+    if (count == 0 || count > kMaxReadBits) {
+        return {};
+    }
+    std::vector<uint8_t> pdu;
+    pdu.reserve(5);
+    pdu.push_back(static_cast<uint8_t>(FunctionCode::ReadCoils));
+    appendU16(pdu, startAddress);
+    appendU16(pdu, count);
+    return pdu;
+}
+
+std::vector<uint8_t> buildReadDiscreteInputs(uint16_t startAddress, uint16_t count) {
+    if (count == 0 || count > kMaxReadBits) {
+        return {};
+    }
+    std::vector<uint8_t> pdu;
+    pdu.reserve(5);
+    pdu.push_back(static_cast<uint8_t>(FunctionCode::ReadDiscreteInputs));
+    appendU16(pdu, startAddress);
+    appendU16(pdu, count);
+    return pdu;
+}
+
+std::vector<uint8_t> buildWriteSingleCoil(uint16_t address, bool value) {
+    std::vector<uint8_t> pdu;
+    pdu.reserve(5);
+    pdu.push_back(static_cast<uint8_t>(FunctionCode::WriteSingleCoil));
+    appendU16(pdu, address);
+    // 规范只定义两个值：0xFF00 = ON，0x0000 = OFF。
+    // 这里直接按布尔转换，不给调用方传任意值的口子 —— 传 0x0001 的设备是存在的，
+    // 但那是「不合规的实现」，本项目的立场是只发合规帧，把不合规留给异常注入去测。
+    appendU16(pdu, value ? 0xFF00u : 0x0000u);
+    return pdu;
+}
+
 std::vector<uint8_t> buildReadHoldingRegisters(uint16_t startAddress, uint16_t count) {
     if (count == 0 || count > kMaxReadRegisters) {
         return {};  // 参数非法，交由调用方报错，不产生一条注定被拒绝的报文
@@ -273,7 +309,7 @@ ReadRegistersResult parseReadRegistersResponse(const Frame& frame, uint16_t expe
         return result;
     }
     if (!isRegisterFunction(frame.functionCode)) {
-        result.error = "功能码不是读保持寄存器/输入寄存器（0x01、0x02 的位读取在阶段 3 实现）";
+        result.error = "功能码不是读保持寄存器/输入寄存器；位读取请用 parseReadBitsResponse";
         return result;
     }
     if (frame.pdu.empty()) {
@@ -294,6 +330,45 @@ ReadRegistersResult parseReadRegistersResponse(const Frame& frame, uint16_t expe
     result.values.reserve(expectedCount);
     for (uint16_t i = 0; i < expectedCount; ++i) {
         result.values.push_back(readU16(&frame.pdu[1 + static_cast<std::size_t>(i) * 2]));
+    }
+    result.valid = true;
+    return result;
+}
+
+ReadBitsResult parseReadBitsResponse(const Frame& frame, uint16_t expectedCount) {
+    ReadBitsResult result;
+    result.functionCode = frame.functionCode;
+
+    if (frame.isException()) {
+        result.exception = frame.exceptionCode();
+        result.error = toChineseHint(result.exception);
+        return result;
+    }
+    const uint8_t function = frame.functionCode;
+    if (function != static_cast<uint8_t>(FunctionCode::ReadCoils) &&
+        function != static_cast<uint8_t>(FunctionCode::ReadDiscreteInputs)) {
+        result.error = "功能码不是读线圈/读离散输入";
+        return result;
+    }
+    if (frame.pdu.empty()) {
+        result.error = "PDU 缺少字节数字段";
+        return result;
+    }
+
+    // 位区的字节数由数量向上取整得到（8 位一字节）。
+    const std::size_t byteCount = static_cast<std::size_t>(frame.pdu[0]);
+    if (byteCount != (static_cast<std::size_t>(expectedCount) + 7) / 8) {
+        result.error = "响应字节数与请求的位数不一致";
+        return result;
+    }
+    if (frame.pdu.size() != byteCount + 1) {
+        result.error = "PDU 实际长度与字节数字段不一致";
+        return result;
+    }
+
+    // 解包：位在字节里低位在前，只取前 expectedCount 个（末字节的高位是补零，不属于数据）。
+    for (std::size_t i = 0; i < expectedCount; ++i) {
+        result.bits.push_back((frame.pdu[1 + i / 8] & (1u << (i % 8))) != 0);
     }
     result.valid = true;
     return result;

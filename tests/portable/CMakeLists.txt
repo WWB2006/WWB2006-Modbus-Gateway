@@ -1,4 +1,4 @@
-foreach(test_name portable_tests device_tests)
+foreach(test_name portable_tests device_tests simulator_tests)
     add_executable(${test_name} ${test_name}.cpp)
     target_link_libraries(${test_name} PRIVATE gateway_core)
 
