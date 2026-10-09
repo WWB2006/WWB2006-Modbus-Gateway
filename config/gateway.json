@@ -1,0 +1,31 @@
+{
+  "devices": [
+    {
+      "name": "plc-01",
+      "transport": "tcp",
+      "host": "127.0.0.1",
+      "port": 5020,
+      "unitId": 1,
+      "pollIntervalMs": 500,
+      "timeoutMs": 1000,
+      "retry": 3,
+      "points": [ { "func": 3, "address": 0, "count": 10 } ]
+    },
+    {
+      "name": "meter-02",
+      "transport": "rtu",
+      "serialPort": "COM11",
+      "baudRate": 9600,
+      "parity": "N",
+      "dataBits": 8,
+      "stopBits": 1,
+      "unitId": 2,
+      "pollIntervalMs": 1000,
+      "timeoutMs": 1000,
+      "retry": 3,
+      "points": [ { "func": 4, "address": 0, "count": 4 } ]
+    }
+  ],
+  "storage": { "database": "data/records.db", "batchSize": 500 },
+  "logging": { "level": "info", "rotateSizeMb": 32 }
+}

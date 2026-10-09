@@ -1,0 +1,18 @@
+# 统一行尾：检出到 Windows 用 CRLF，入库一律 LF。
+# 这样跨平台协作与 CI（Linux）不会因为行尾产生无意义的 diff。
+* text=auto eol=lf
+
+# 明确按二进制处理，避免 Git 尝试转换
+*.exe   binary
+*.dll   binary
+*.so    binary
+*.a     binary
+*.lib   binary
+*.png   binary
+*.jpg   binary
+*.ico   binary
+*.pdf   binary
+*.db    binary
+
+# Shell 脚本在 Linux 上必须保留 LF
+*.sh    text eol=lf
