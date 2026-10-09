@@ -20,7 +20,10 @@ if (Qt6_FOUND)
     set(CMAKE_AUTOMOC ON)
     set(CMAKE_AUTOUIC ON)
     set(CMAKE_AUTORCC ON)
-    find_package(Qt6 6.2 QUIET COMPONENTS Widgets Network SerialPort SerialBus Sql Charts Test)
+    # 用 OPTIONAL_COMPONENTS：缺少 Charts 这类非必需模块时，
+    # 不应把 Qt6_FOUND 置为假，否则会误报「未找到 Qt6」。
+    find_package(Qt6 6.2 QUIET OPTIONAL_COMPONENTS
+        Widgets Network SerialPort SerialBus Sql Charts Test)
 endif()
 
 add_subdirectory(src)

@@ -57,6 +57,9 @@ struct DecodeResult {
     DecodeStatus status = DecodeStatus::Incomplete;
     Frame frame;
     std::size_t consumed = 0;  // 仅在 status == Ok 时有效
+    // CRC 失败时给出「推测的帧长」，让调用方可以整帧丢弃而不是逐字节重新同步。
+    // 这是工业现场的常见做法：误码帧按推断长度丢掉，避免把后面正确的帧也拆散。
+    std::size_t frameLengthHint = 0;
     std::string message;
 };
 

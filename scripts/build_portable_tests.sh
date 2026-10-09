@@ -13,6 +13,10 @@ sources=(
     src/protocol/ExceptionCode.cpp
     src/protocol/ModbusFrame.cpp
     src/protocol/ModbusCodec.cpp
+    src/transport/TransportInterface.cpp
+    src/transport/ByteAccumulator.cpp
+    src/device/DeviceSession.cpp
+    src/device/DeviceManager.cpp
 )
 
 "$cxx" -std=c++17 -Wall -Wextra -O1 -I include \
@@ -20,7 +24,12 @@ sources=(
     "${sources[@]}" tests/portable/portable_tests.cpp
 
 "$cxx" -std=c++17 -Wall -Wextra -O1 -I include \
+    -o build_portable/device_tests \
+    "${sources[@]}" tests/portable/device_tests.cpp
+
+"$cxx" -std=c++17 -Wall -Wextra -O1 -I include \
     -o build_portable/gateway_cli \
     "${sources[@]}" src/gateway_cli.cpp
 
 ./build_portable/portable_tests
+./build_portable/device_tests

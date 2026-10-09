@@ -7,47 +7,14 @@
 #include <vector>
 
 #include "gateway/protocol/Crc16.h"
+#include "gateway/protocol/ExceptionCode.h"
 #include "gateway/protocol/ModbusCodec.h"
+#include "test_support.h"
 
 using namespace gateway::protocol;
+using namespace test_support;
 
 namespace {
-
-int g_checks = 0;
-int g_failures = 0;
-std::string g_section;
-
-void section(const char* name) {
-    g_section = name;
-    std::printf("\n-- %s\n", name);
-}
-
-void check(bool ok, const std::string& what) {
-    ++g_checks;
-    if (ok) {
-        return;
-    }
-    ++g_failures;
-    std::printf("  [FAIL] %s :: %s\n", g_section.c_str(), what.c_str());
-}
-
-std::string hexOf(const std::vector<uint8_t>& bytes) {
-    return toHex(bytes);
-}
-
-void checkBytes(const std::vector<uint8_t>& actual, const std::string& expect,
-                const std::string& what) {
-    const std::string got = hexOf(actual);
-    check(got == expect, what + " 期望 [" + expect + "] 实际 [" + got + "]");
-}
-
-void checkU16(uint16_t actual, uint16_t expect, const std::string& what) {
-    char buffer[64];
-    std::snprintf(buffer, sizeof(buffer), "0x%04X", actual);
-    char expected[64];
-    std::snprintf(expected, sizeof(expected), "0x%04X", expect);
-    check(actual == expect, what + " 期望 " + expected + " 实际 " + buffer);
-}
 
 // ------------------------------------------------------------------ CRC16
 
@@ -287,15 +254,77 @@ void testMatching() {
     DecodeResult decoded;
     decodeTcp(frame.data(), frame.size(), decoded);
 
-    check(matchesRequest(decoded.frame, Transport::Tcp, 7, 1), "事务号与单元号都相符");
-    check(!matchesRequest(decoded.frame, Transport::Tcp, 8, 1), "事务号不符时判为迟到响应");
-    check(!matchesRequest(decoded.frame, Transport::Tcp, 7, 2), "单元号不符时判为他人响应");
+    check(matchesRequest(decoded.frame, Transport::Tcp, 7, 1, 0x03), "事务号、单元号、功能码都相符");
+    check(!matchesRequest(decoded.frame, Transport::Tcp, 8, 1, 0x03), "事务号不符时判为迟到响应");
+    check(!matchesRequest(decoded.frame, Transport::Tcp, 7, 2, 0x03), "单元号不符时判为他人响应");
+    check(!matchesRequest(decoded.frame, Transport::Tcp, 7, 1, 0x04), "功能码不符时判为他人响应");
+
+    // 异常响应：功能码 0x83 = 0x03 | 0x80，必须能与请求 0x03 匹配上
+    const auto exceptionFrame = fromHex("00 07 00 00 00 03 01 83 02");
+    DecodeResult exceptionDecoded;
+    decodeTcp(exceptionFrame.data(), exceptionFrame.size(), exceptionDecoded);
+    check(matchesRequest(exceptionDecoded.frame, Transport::Tcp, 7, 1, 0x03),
+          "异常响应的功能码按 0x03 | 0x80 放行");
 
     const auto rtuFrame = fromHex("01 03 02 00 0A 38 43");
     DecodeResult rtuDecoded;
     decodeRtuResponse(rtuFrame.data(), rtuFrame.size(), rtuDecoded);
-    check(matchesRequest(rtuDecoded.frame, Transport::Rtu, 0, 1), "RTU 只比对单元号");
-    check(!matchesRequest(rtuDecoded.frame, Transport::Rtu, 0, 3), "RTU 单元号不符");
+    check(matchesRequest(rtuDecoded.frame, Transport::Rtu, 0, 1, 0x03), "RTU 比对单元号与功能码");
+    check(!matchesRequest(rtuDecoded.frame, Transport::Rtu, 0, 3, 0x03), "RTU 单元号不符");
+    check(!matchesRequest(rtuDecoded.frame, Transport::Rtu, 0, 1, 0x06), "RTU 功能码不符");
+}
+
+// ------------------------------------------------------------ 异常码映射
+
+// README 声称覆盖异常码 0x01-0x04，这里把 0x01-0x06 全部固定住。
+// 帧尾 CRC 由独立脚本按 0xA001/0xFFFF 复算得到，不是用被测实现生成的。
+void testExceptionCodes() {
+    section("异常码枚举与原始值映射");
+    check(toExceptionCode(0x01) == ExceptionCode::IllegalFunction, "0x01 非法功能码");
+    check(toExceptionCode(0x02) == ExceptionCode::IllegalDataAddress, "0x02 非法数据地址");
+    check(toExceptionCode(0x03) == ExceptionCode::IllegalDataValue, "0x03 非法数据值");
+    check(toExceptionCode(0x04) == ExceptionCode::SlaveDeviceFailure, "0x04 从站设备故障");
+    check(toExceptionCode(0x05) == ExceptionCode::Acknowledge, "0x05 确认");
+    check(toExceptionCode(0x06) == ExceptionCode::SlaveDeviceBusy, "0x06 从站设备忙");
+    check(toExceptionCode(0x7F) == ExceptionCode::Unknown, "未定义异常码归为 Unknown");
+
+    section("异常码可读文案");
+    for (const uint8_t raw : {0x01, 0x02, 0x03, 0x04, 0x05, 0x06}) {
+        const ExceptionCode code = toExceptionCode(raw);
+        check(std::string(toString(code)).size() > 0, "toString 非空");
+        check(!toChineseHint(code).empty(), "中文提示非空");
+    }
+
+    section("异常功能码判定");
+    check(isExceptionFunction(0x83), "0x83 是异常功能码");
+    check(isExceptionFunction(0x84), "0x84 是异常功能码");
+    check(!isExceptionFunction(0x03), "0x03 不是异常功能码");
+    check(!isExceptionFunction(0x00), "0x00 不是异常功能码");
+
+    section("RTU 异常响应逐码解析");
+    struct Case {
+        const char* frame;
+        ExceptionCode expect;
+    };
+    const Case cases[] = {
+        {"01 83 01 80 F0", ExceptionCode::IllegalFunction},
+        {"01 83 03 01 31", ExceptionCode::IllegalDataValue},
+        {"01 83 04 40 F3", ExceptionCode::SlaveDeviceFailure},
+        {"01 83 06 C1 32", ExceptionCode::SlaveDeviceBusy},
+        {"01 84 04 42 C3", ExceptionCode::SlaveDeviceFailure},  // 功能码 0x04 的异常响应
+    };
+    for (const Case& item : cases) {
+        const auto raw = fromHex(item.frame);
+        DecodeResult decoded;
+        const std::size_t consumed = decodeRtuResponse(raw.data(), raw.size(), decoded);
+        check(consumed == 5, std::string("异常帧消费 5 字节 [") + item.frame + "]");
+        check(decoded.status == DecodeStatus::Ok,
+              std::string("异常帧状态为 Ok [") + item.frame + "]");
+        check(decoded.frame.isException(),
+              std::string("识别为异常帧 [") + item.frame + "]");
+        check(decoded.frame.exceptionCode() == item.expect,
+              std::string("异常码解析正确 [") + item.frame + "]");
+    }
 }
 
 // ------------------------------------------------------------------ 工具
@@ -321,13 +350,8 @@ int main() {
     testDecodeRtu();
     testResponseParsing();
     testMatching();
+    testExceptionCodes();
     testHexHelpers();
 
-    std::printf("\n断言 %d 项，失败 %d 项\n", g_checks, g_failures);
-    if (g_failures != 0) {
-        std::printf("结果：失败\n");
-        return 1;
-    }
-    std::printf("结果：全部通过\n");
-    return 0;
+    return test_support::summary();
 }

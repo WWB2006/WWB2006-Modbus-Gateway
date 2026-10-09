@@ -11,7 +11,11 @@ $sources = @(
     "src/protocol/Crc16.cpp",
     "src/protocol/ExceptionCode.cpp",
     "src/protocol/ModbusFrame.cpp",
-    "src/protocol/ModbusCodec.cpp"
+    "src/protocol/ModbusCodec.cpp",
+    "src/transport/TransportInterface.cpp",
+    "src/transport/ByteAccumulator.cpp",
+    "src/device/DeviceSession.cpp",
+    "src/device/DeviceManager.cpp"
 )
 
 & $cxx -std=c++17 -Wall -Wextra -O1 -I include `
@@ -20,8 +24,16 @@ $sources = @(
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 & $cxx -std=c++17 -Wall -Wextra -O1 -I include `
+    -o build_portable/device_tests.exe `
+    @sources tests/portable/device_tests.cpp
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+& $cxx -std=c++17 -Wall -Wextra -O1 -I include `
     -o build_portable/gateway_cli.exe `
     @sources src/gateway_cli.cpp
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 & "./build_portable/portable_tests.exe"
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+& "./build_portable/device_tests.exe"

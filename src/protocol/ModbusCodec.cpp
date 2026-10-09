@@ -77,8 +77,7 @@ std::size_t rtuFrameLength(const uint8_t* buffer, std::size_t len, Role role) {
     }
 }
 
-std::size_t decodeRtuImpl(const uint8_t* buffer, std::size_t len, DecodeResult& out,
-                          Role role) noexcept {
+std::size_t decodeRtuImpl(const uint8_t* buffer, std::size_t len, DecodeResult& out, Role role) {
     out = DecodeResult{};
     if (buffer == nullptr) {
         out.status = DecodeStatus::Incomplete;
@@ -105,6 +104,7 @@ std::size_t decodeRtuImpl(const uint8_t* buffer, std::size_t len, DecodeResult& 
     }
     if (!verifyCrc16(buffer, frameLength)) {
         out.status = DecodeStatus::BadCrc;
+        out.frameLengthHint = frameLength;
         out.message = "CRC 校验失败，本帧已丢弃并重新同步";
         return 0;
     }
@@ -210,7 +210,7 @@ std::vector<uint8_t> encodeRtuRequest(uint8_t unitId, const std::vector<uint8_t>
 
 // ------------------------------------------------------------------ 解帧
 
-std::size_t decodeTcp(const uint8_t* buffer, std::size_t len, DecodeResult& out) noexcept {
+std::size_t decodeTcp(const uint8_t* buffer, std::size_t len, DecodeResult& out) {
     out = DecodeResult{};
     if (buffer == nullptr) {
         out.status = DecodeStatus::Incomplete;
@@ -253,12 +253,11 @@ std::size_t decodeTcp(const uint8_t* buffer, std::size_t len, DecodeResult& out)
     return total;
 }
 
-std::size_t decodeRtuResponse(const uint8_t* buffer, std::size_t len,
-                              DecodeResult& out) noexcept {
+std::size_t decodeRtuResponse(const uint8_t* buffer, std::size_t len, DecodeResult& out) {
     return decodeRtuImpl(buffer, len, out, Role::Response);
 }
 
-std::size_t decodeRtuRequest(const uint8_t* buffer, std::size_t len, DecodeResult& out) noexcept {
+std::size_t decodeRtuRequest(const uint8_t* buffer, std::size_t len, DecodeResult& out) {
     return decodeRtuImpl(buffer, len, out, Role::Request);
 }
 
@@ -343,14 +342,22 @@ WriteMultipleResult parseWriteMultipleResponse(const Frame& frame) {
 }
 
 bool matchesRequest(const Frame& response, Transport transport, uint16_t transactionId,
-                    uint8_t unitId) noexcept {
+                    uint8_t unitId, uint8_t functionCode) noexcept {
     if (response.unitId != unitId) {
         return false;
     }
+
+    // 异常响应把请求功能码的最高位置 1（0x03 → 0x83），必须一并放行，
+    // 否则一个合法的异常响应会被当成「别人的帧」丢掉，事务只能等到超时。
+    const uint8_t exceptionFunction = static_cast<uint8_t>(functionCode | 0x80u);
+    if (response.functionCode != functionCode && response.functionCode != exceptionFunction) {
+        return false;
+    }
+
     if (transport == Transport::Tcp) {
         return response.transactionId == transactionId;
     }
-    return true;  // RTU 没有事务号，只能靠单元号 + 顺序匹配
+    return true;  // RTU 没有事务号，只能靠单元号 + 功能码匹配
 }
 
 // ------------------------------------------------------------------ 工具

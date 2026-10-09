@@ -24,6 +24,20 @@
       "timeoutMs": 1000,
       "retry": 3,
       "points": [ { "func": 4, "address": 0, "count": 4 } ]
+    },
+    {
+      "name": "vfd-03",
+      "transport": "tcp",
+      "host": "192.168.1.30",
+      "port": 502,
+      "unitId": 3,
+      "pollIntervalMs": 2000,
+      "timeoutMs": 1000,
+      "retry": 2,
+      "points": [
+        { "func": 3, "address": 0, "count": 8 },
+        { "func": 6, "address": 8192, "count": 1, "value": 1 }
+      ]
     }
   ],
   "storage": { "database": "data/records.db", "batchSize": 500 },

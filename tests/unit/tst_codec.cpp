@@ -187,14 +187,22 @@ void TestCodec::requestMatching() {
     DecodeResult result;
     decodeTcp(frame.data(), frame.size(), result);
 
-    QVERIFY(matchesRequest(result.frame, Transport::Tcp, 7, 1));
-    QVERIFY(!matchesRequest(result.frame, Transport::Tcp, 8, 1));
-    QVERIFY(!matchesRequest(result.frame, Transport::Tcp, 7, 2));
+    QVERIFY(matchesRequest(result.frame, Transport::Tcp, 7, 1, 0x03));
+    QVERIFY(!matchesRequest(result.frame, Transport::Tcp, 8, 1, 0x03));
+    QVERIFY(!matchesRequest(result.frame, Transport::Tcp, 7, 2, 0x03));
+    QVERIFY(!matchesRequest(result.frame, Transport::Tcp, 7, 1, 0x04));
+
+    // 异常响应（0x83 = 0x03 | 0x80）必须能与请求 0x03 匹配
+    DecodeResult exceptionResult;
+    const auto exceptionFrame = fromHex("00 07 00 00 00 03 01 83 02");
+    decodeTcp(exceptionFrame.data(), exceptionFrame.size(), exceptionResult);
+    QVERIFY(matchesRequest(exceptionResult.frame, Transport::Tcp, 7, 1, 0x03));
 
     DecodeResult rtuResult;
     decodeHex("01 03 02 00 0A 38 43", rtuResult);
-    QVERIFY(matchesRequest(rtuResult.frame, Transport::Rtu, 0, 1));
-    QVERIFY(!matchesRequest(rtuResult.frame, Transport::Rtu, 0, 3));
+    QVERIFY(matchesRequest(rtuResult.frame, Transport::Rtu, 0, 1, 0x03));
+    QVERIFY(!matchesRequest(rtuResult.frame, Transport::Rtu, 0, 3, 0x03));
+    QVERIFY(!matchesRequest(rtuResult.frame, Transport::Rtu, 0, 1, 0x06));
 }
 
 QTEST_APPLESS_MAIN(TestCodec)
