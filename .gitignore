@@ -18,7 +18,7 @@ logs/
 *.db-wal
 *.csv
 
-# Python（pytest 端到端测试）
+# Python（pytest 端到端测试，阶段 10 规划；当前交叉验证走 scripts/verify_simulator.py）
 .venv/
 __pycache__/
 *.pyc

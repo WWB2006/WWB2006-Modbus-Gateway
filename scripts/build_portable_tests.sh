@@ -49,6 +49,10 @@ esac
     -o build_portable/slave_simulator \
     "${sources[@]}" src/sim/slave_simulator_main.cpp "${link_flags[@]}"
 
-./build_portable/portable_tests
-./build_portable/device_tests
-./build_portable/simulator_tests
+# 在构建目录内运行：测试写的临时文件（test_slave_config*.json）会落在
+# build_portable/ 里，与 CMake + ctest 路径下落盘在 build-linux/ 一致，
+# 两种情况都不会让仓库根目录出现游离的 json。
+# 注意不要改回在仓库根目录运行——那会让测试把临时文件写到仓库根目录。
+( cd build_portable && ./portable_tests )
+( cd build_portable && ./device_tests )
+( cd build_portable && ./simulator_tests )

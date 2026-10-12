@@ -391,8 +391,14 @@ void testConfigParsing() {
     test_support::section("阶段 3 · 配置解析");
     gateway::sim::SimulatorConfig config;
 
-    // 用一个临时文件验证：配置文件是本机真实路径，测试里不依赖工作目录
-    const std::string path = "build_portable/test_slave_config.json";
+    // 临时配置写在当前工作目录，不建子目录：
+    //   CMake + ctest 下，ctest 会把工作目录设为构建目录（build-linux/ 等）；
+    //   build_portable_tests.sh 下改为在 build_portable/ 内运行本测试。
+    // 两者都被 .gitignore 忽略，不会让仓库根目录出现游离的 json。
+    // 曾经写成 "build_portable/test_slave_config.json"，那要求工作目录下
+    // 恰好存在 build_portable/ 子目录——只在 build_portable_tests.sh 的老跑法下成立，
+    // 换任何别的构建目录名都会 fopen 失败。
+    const std::string path = "test_slave_config.json";
     {
         std::FILE* file = std::fopen(path.c_str(), "wb");
         test_support::check(file != nullptr, "可以创建临时配置文件");
@@ -436,7 +442,7 @@ void testConfigParsing() {
 
     // 初值地址超出 size：必须报错而不是静默丢弃
     {
-        const std::string badPath = "build_portable/test_slave_config_bad.json";
+        const std::string badPath = "test_slave_config_bad.json";
         std::FILE* file = std::fopen(badPath.c_str(), "wb");
         if (file != nullptr) {
             const char* text =
@@ -454,7 +460,7 @@ void testConfigParsing() {
 
     // 语法错误：必须报出定位信息
     {
-        const std::string syntaxPath = "build_portable/test_slave_config_syntax.json";
+        const std::string syntaxPath = "test_slave_config_syntax.json";
         std::FILE* file = std::fopen(syntaxPath.c_str(), "wb");
         if (file != nullptr) {
             const char* text = "{ \"registers\": { \"holding\": { \"size\": 4 } ";

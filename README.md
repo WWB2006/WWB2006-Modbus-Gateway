@@ -26,7 +26,7 @@
 | 界面 | Qt 6 Widgets（阶段 5 起） |
 | 通信 | QTcpSocket（TCP）、QSerialPort（RS-485 RTU） |
 | 存储 | SQLite（阶段 6 起） |
-| 测试 | Qt Test（单元测试）、pytest（端到端）、自研可移植测试 |
+| 测试 | Qt Test（单元测试）、自研可移植测试、pymodbus 交叉验证脚本（端到端，已落地）；pytest（端到端，阶段 10 规划） |
 
 ## 目录结构
 
@@ -95,8 +95,9 @@ ui  ->  device  ->  transport  ->  protocol
 .\scripts\build_portable_tests.ps1
 ```
 
-这个脚本会编译三个可执行文件并运行两套测试：`portable_tests`（协议层）、
-`device_tests`（设备层，用假链路驱动）、`gateway_cli`（命令行演示）。
+这个脚本会编译五个可执行文件（`portable_tests` / `device_tests` / `simulator_tests` /
+`gateway_cli` / `slave_simulator`），并运行三套测试：`portable_tests`（协议层）、
+`device_tests`（设备层，用假链路驱动）、`simulator_tests`（从站模拟器）。
 
 ### 方式二：装好 Qt 6 之后的完整构建
 
@@ -112,7 +113,7 @@ ui  ->  device  ->  transport  ->  protocol
 
 ### 方式三：CMake 已装但没有 Qt
 
-顶层 `CMakeLists.txt` 把 Qt 设为可选：没装 Qt 时只构建 `gateway_core` 与 `gateway_cli`，
+顶层 `CMakeLists.txt` 把 Qt 设为可选：没装 Qt 时只构建 `gateway_core`、`gateway_cli` 与 `slave_simulator`（从站模拟器用套接字、不依赖 Qt），
 `ctest` 仍能运行可移植测试；装好 Qt 后重新执行 `cmake` 会自动启用界面程序与 Qt Test。
 
 ```bash
@@ -143,7 +144,7 @@ ctest --test-dir build --output-on-failure
 
 - `TransportInterface`：链路抽象（open/close/send + 字节/状态/消息回调），不依赖 Qt，
   因此 TCP、串口与测试用的假链路可以共用同一套设备层代码；
-- `TcpTransport`：基于 QTcpSocket 的 TCP 链路，含连接超时与错误上报（**本机无 Qt，未编译**）；
+- `TcpTransport`：基于 QTcpSocket 的 TCP 链路，含连接超时与错误上报；检测到 Qt 时自动编入 `gateway_core`（Linux + Qt 6.2.4 下已实测编译进核心库）；
 - `ByteAccumulator`：接收缓冲区，对应项目一里的 `Buffer`；
 - `DeviceSession`：请求 / 超时 / 重传 / 切帧 / 结果回调的完整状态机，一次只允许一个在途事务；
 - `DeviceManager`：多设备注册、启动、时钟分发与结果派发；
@@ -202,13 +203,16 @@ python scripts/verify_simulator.py                # 本项目自带的交叉验�
 
 ## 已验证的证据
 
-两套可移植测试共 **219 项断言全部通过**（编译器：MinGW-W64 g++ 8.1.0，`-Wall -Wextra` 无告警）：
+三套可移植测试共 **306 项断言全部通过**（编译器：Windows MinGW-W64 g++ 8.1.0 与 Ubuntu 22.04 GCC 11.4.0，**双平台数字一致**，`-Wall -Wextra` 零告警）：
 
 ```
 断言 131 项，失败 0 项     （协议层 portable_tests）
 断言 88 项，失败 0 项      （设备层 device_tests）
+断言 87 项，失败 0 项      （从站模拟器 simulator_tests）
 结果：全部通过
 ```
+
+另两道防线也已验证：Qt Test（`tst_crc16` / `tst_codec`，Ubuntu + Qt 6.2.4 下 `ctest` 5/5 passed）与 pymodbus 交叉验证脚本 `verify_simulator.py`（54 项，Windows pymodbus 3.15.0 / Linux 3.16.1 双平台均通过）。完整记录见 `docs/运行环境与测试验证说明.md`。
 
 阶段 3 的从站模拟器另加 **87 项断言**，并且通过了**第三方实现的交叉验证**：
 
@@ -266,12 +270,13 @@ python scripts/verify_simulator.py                # 本项目自带的交叉验�
 # 打印一组编解码结果（不需要 Qt）
 ./build_portable/gateway_cli
 
-# 两套可移植测试
+# 三套可移植测试（不需要 Qt）
 ./build_portable/portable_tests
 ./build_portable/device_tests
+./build_portable/simulator_tests
 
-# 全部测试
-ctest --test-dir build --output-on-failure
+# 全部测试（含 Qt Test；Linux 构建目录是 build-linux，Windows 是 build）
+ctest --test-dir build-linux --output-on-failure
 ```
 
 ## 后续阶段路线
