@@ -1,0 +1,19 @@
+{
+  "name": "composite-delay-and-crc",
+  "delayMs": {
+    "min": 50,
+    "max": 300,
+    "ratio": 0.2
+  },
+  "crcError": {
+    "ratio": 0.05
+  },
+  "exception": {
+    "ratio": 0.05,
+    "code": 6
+  },
+  "disconnect": {
+    "afterRequests": 100,
+    "durationMs": 4000
+  }
+}

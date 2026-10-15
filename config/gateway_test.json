@@ -1,0 +1,26 @@
+{
+  "devices": [
+    {
+      "name": "test-plc",
+      "transport": "tcp",
+      "host": "127.0.0.1",
+      "port": 5020,
+      "unitId": 1,
+      "pollIntervalMs": 100,
+      "timeoutMs": 800,
+      "retry": 3,
+      "points": [
+        { "func": 3, "address": 0, "count": 5 }
+      ]
+    }
+  ],
+  "storage": {
+    "database": "data/test_records.db",
+    "batchSize": 10
+  },
+  "logging": {
+    "level": "info",
+    "file": "logs/test_gateway.log",
+    "rotateSizeMb": 10
+  }
+}

@@ -1,0 +1,97 @@
+{
+  "devices": [
+    {
+      "name": "plc-fault-01",
+      "transport": "tcp",
+      "host": "127.0.0.1",
+      "port": 5032,
+      "unitId": 1,
+      "pollIntervalMs": 300,
+      "timeoutMs": 1200,
+      "retry": 3,
+      "points": [
+        {
+          "func": 3,
+          "address": 0,
+          "count": 5
+        }
+      ]
+    },
+    {
+      "name": "plc-fault-02",
+      "transport": "tcp",
+      "host": "127.0.0.1",
+      "port": 5032,
+      "unitId": 1,
+      "pollIntervalMs": 300,
+      "timeoutMs": 1200,
+      "retry": 3,
+      "points": [
+        {
+          "func": 3,
+          "address": 0,
+          "count": 5
+        }
+      ]
+    },
+    {
+      "name": "plc-fault-03",
+      "transport": "tcp",
+      "host": "127.0.0.1",
+      "port": 5032,
+      "unitId": 1,
+      "pollIntervalMs": 300,
+      "timeoutMs": 1200,
+      "retry": 3,
+      "points": [
+        {
+          "func": 3,
+          "address": 0,
+          "count": 5
+        }
+      ]
+    },
+    {
+      "name": "plc-fault-04",
+      "transport": "tcp",
+      "host": "127.0.0.1",
+      "port": 5032,
+      "unitId": 1,
+      "pollIntervalMs": 300,
+      "timeoutMs": 1200,
+      "retry": 3,
+      "points": [
+        {
+          "func": 3,
+          "address": 0,
+          "count": 5
+        }
+      ]
+    },
+    {
+      "name": "plc-fault-05",
+      "transport": "tcp",
+      "host": "127.0.0.1",
+      "port": 5032,
+      "unitId": 1,
+      "pollIntervalMs": 300,
+      "timeoutMs": 1200,
+      "retry": 3,
+      "points": [
+        {
+          "func": 3,
+          "address": 0,
+          "count": 5
+        }
+      ]
+    }
+  ],
+  "storage": {
+    "database": "C:/Users/Lenovo/Desktop/gemail/data/bench_fault.db",
+    "batchSize": 20
+  },
+  "logging": {
+    "level": "warn",
+    "file": "logs/bench_fault.log"
+  }
+}

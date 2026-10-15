@@ -1,0 +1,7 @@
+{
+  "name": "disconnect-fault",
+  "disconnect": {
+    "afterRequests": 25,
+    "durationMs": 3000
+  }
+}

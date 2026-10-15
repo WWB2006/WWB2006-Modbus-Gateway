@@ -1,0 +1,8 @@
+{
+  "name": "delay-fault",
+  "delayMs": {
+    "min": 50,
+    "max": 400,
+    "ratio": 0.3
+  }
+}

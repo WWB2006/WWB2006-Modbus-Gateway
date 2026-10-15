@@ -1,0 +1,29 @@
+{
+  "devices": [
+    {
+      "name": "plc-baseline",
+      "transport": "tcp",
+      "host": "127.0.0.1",
+      "port": 5030,
+      "unitId": 1,
+      "pollIntervalMs": 500,
+      "timeoutMs": 1000,
+      "retry": 3,
+      "points": [
+        {
+          "func": 3,
+          "address": 0,
+          "count": 10
+        }
+      ]
+    }
+  ],
+  "storage": {
+    "database": "C:/Users/Lenovo/Desktop/gemail/data/bench_single.db",
+    "batchSize": 10
+  },
+  "logging": {
+    "level": "warn",
+    "file": "logs/bench.log"
+  }
+}

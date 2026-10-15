@@ -1,0 +1,61 @@
+name: Dual-Platform Modbus Gateway CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-and-test:
+    name: Build & Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            qt-arch: linux_gcc_64
+            cmake-gen: "Ninja"
+          - os: windows-latest
+            qt-arch: win64_msvc2019_64
+            cmake-gen: "Ninja"
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ninja pytest pymodbus pyserial
+
+      - name: Install Qt 6
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.5.3'
+          arch: ${{ matrix.qt-arch }}
+          modules: 'qtserialbus qtcharts'
+          cache: true
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build All Targets
+        run: |
+          cmake --build build --parallel
+
+      - name: Run C++ Unit Tests (CTest)
+        run: |
+          ctest --test-dir build --output-on-failure
+
+      - name: Run End-to-End & Fault Injection Tests (Pytest)
+        run: |
+          pytest tests/api -v

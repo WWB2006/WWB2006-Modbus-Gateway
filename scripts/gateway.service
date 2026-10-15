@@ -1,0 +1,24 @@
+[Unit]
+Description=Modbus Industrial Gateway Headless Daemon
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/modbus-gateway
+ExecStart=/opt/modbus-gateway/bin/gateway_cli -c /opt/modbus-gateway/config/gateway.json
+Restart=always
+RestartSec=5s
+LimitNOFILE=65536
+
+# Sandboxing & Security
+ProtectSystem=full
+ProtectHome=true
+NoNewPrivileges=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

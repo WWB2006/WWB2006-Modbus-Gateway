@@ -1,0 +1,7 @@
+{
+  "name": "exception-fault",
+  "exception": {
+    "ratio": 0.25,
+    "code": 6
+  }
+}

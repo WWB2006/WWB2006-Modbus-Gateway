@@ -1,0 +1,182 @@
+{
+  "devices": [
+    {
+      "name": "plc-concurrent-01",
+      "transport": "tcp",
+      "host": "127.0.0.1",
+      "port": 5031,
+      "unitId": 1,
+      "pollIntervalMs": 500,
+      "timeoutMs": 1000,
+      "retry": 3,
+      "points": [
+        {
+          "func": 3,
+          "address": 0,
+          "count": 10
+        }
+      ]
+    },
+    {
+      "name": "plc-concurrent-02",
+      "transport": "tcp",
+      "host": "127.0.0.1",
+      "port": 5031,
+      "unitId": 1,
+      "pollIntervalMs": 500,
+      "timeoutMs": 1000,
+      "retry": 3,
+      "points": [
+        {
+          "func": 3,
+          "address": 0,
+          "count": 10
+        }
+      ]
+    },
+    {
+      "name": "plc-concurrent-03",
+      "transport": "tcp",
+      "host": "127.0.0.1",
+      "port": 5031,
+      "unitId": 1,
+      "pollIntervalMs": 500,
+      "timeoutMs": 1000,
+      "retry": 3,
+      "points": [
+        {
+          "func": 3,
+          "address": 0,
+          "count": 10
+        }
+      ]
+    },
+    {
+      "name": "plc-concurrent-04",
+      "transport": "tcp",
+      "host": "127.0.0.1",
+      "port": 5031,
+      "unitId": 1,
+      "pollIntervalMs": 500,
+      "timeoutMs": 1000,
+      "retry": 3,
+      "points": [
+        {
+          "func": 3,
+          "address": 0,
+          "count": 10
+        }
+      ]
+    },
+    {
+      "name": "plc-concurrent-05",
+      "transport": "tcp",
+      "host": "127.0.0.1",
+      "port": 5031,
+      "unitId": 1,
+      "pollIntervalMs": 500,
+      "timeoutMs": 1000,
+      "retry": 3,
+      "points": [
+        {
+          "func": 3,
+          "address": 0,
+          "count": 10
+        }
+      ]
+    },
+    {
+      "name": "plc-concurrent-06",
+      "transport": "tcp",
+      "host": "127.0.0.1",
+      "port": 5031,
+      "unitId": 1,
+      "pollIntervalMs": 500,
+      "timeoutMs": 1000,
+      "retry": 3,
+      "points": [
+        {
+          "func": 3,
+          "address": 0,
+          "count": 10
+        }
+      ]
+    },
+    {
+      "name": "plc-concurrent-07",
+      "transport": "tcp",
+      "host": "127.0.0.1",
+      "port": 5031,
+      "unitId": 1,
+      "pollIntervalMs": 500,
+      "timeoutMs": 1000,
+      "retry": 3,
+      "points": [
+        {
+          "func": 3,
+          "address": 0,
+          "count": 10
+        }
+      ]
+    },
+    {
+      "name": "plc-concurrent-08",
+      "transport": "tcp",
+      "host": "127.0.0.1",
+      "port": 5031,
+      "unitId": 1,
+      "pollIntervalMs": 500,
+      "timeoutMs": 1000,
+      "retry": 3,
+      "points": [
+        {
+          "func": 3,
+          "address": 0,
+          "count": 10
+        }
+      ]
+    },
+    {
+      "name": "plc-concurrent-09",
+      "transport": "tcp",
+      "host": "127.0.0.1",
+      "port": 5031,
+      "unitId": 1,
+      "pollIntervalMs": 500,
+      "timeoutMs": 1000,
+      "retry": 3,
+      "points": [
+        {
+          "func": 3,
+          "address": 0,
+          "count": 10
+        }
+      ]
+    },
+    {
+      "name": "plc-concurrent-10",
+      "transport": "tcp",
+      "host": "127.0.0.1",
+      "port": 5031,
+      "unitId": 1,
+      "pollIntervalMs": 500,
+      "timeoutMs": 1000,
+      "retry": 3,
+      "points": [
+        {
+          "func": 3,
+          "address": 0,
+          "count": 10
+        }
+      ]
+    }
+  ],
+  "storage": {
+    "database": "C:/Users/Lenovo/Desktop/gemail/data/bench_multi.db",
+    "batchSize": 50
+  },
+  "logging": {
+    "level": "warn",
+    "file": "logs/bench_multi.log"
+  }
+}
