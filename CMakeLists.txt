@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
-project(modbus_gateway LANGUAGES CXX)
+# 需要 C 语言：third_party/sqlite/sqlite3.c 是 C 代码，
+# 且必须用 C 编译器编（当 C++ 编会因 void* 隐式转换、redefinition 等失败）。
+project(modbus_gateway LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -31,13 +33,21 @@ if (Qt6_FOUND)
     #
     # 注意：OPTIONAL_COMPONENTS 只保证「整个 Qt6 缺失时不报错」，
     # 对子模块自身 find_package 抛出的 FATAL_ERROR 没有保护作用。
-    # 阶段 4 才需要的 SerialPort / SerialBus / Charts，以及本项目从未使用的 Sql，
+    # 阶段 4 需要 Qt6::SerialPort（QSerialPort）。
+    # ⚠️ OPTIONAL_COMPONENTS 只保证「整个 Qt6 缺失时不报错」，
+    # 对子模块自身 find_package 抛出的 FATAL_ERROR 没有保护作用。
+    # 阶段 4 才需要的 SerialBus / Charts，以及本项目从未使用的 Sql，
     # 其 CMake 配置文件会校验 canbusutil、qmlplugindump 等附带工具，
     # 任一缺失即 FATAL_ERROR 中断整个配置（Ubuntu 的 libqt6serialbus6-plugins
     # 就缺 /usr/lib/qt6/bin/canbusutil 这个文件）。
-    # 因此在真正接入串口链路前，不要把它们写进这里。
+    # 因此这里只列 SerialPort（它没有这类附带工具依赖），绝不写 SerialBus。
     find_package(Qt6 6.2 QUIET OPTIONAL_COMPONENTS
-        Widgets Network Test)
+        Widgets Network Test SerialPort)
+    if (TARGET Qt6::SerialPort)
+        message(STATUS "检测到 Qt6::SerialPort：启用串口 RTU 链路（SerialTransport）。")
+    else()
+        message(STATUS "未检测到 Qt6::SerialPort：跳过 SerialTransport，串口链路不可用。")
+    endif()
 endif()
 
 add_subdirectory(src)

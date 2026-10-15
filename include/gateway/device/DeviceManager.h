@@ -34,6 +34,12 @@ public:
 
     void setResultCallback(ResultCallback callback) { resultCallback_ = std::move(callback); }
 
+    // 阶段 9：链路上下线事件。界面 / 网关据此记日志、告警。
+    using LinkCallback = std::function<void(const std::string& deviceName,
+                                            DeviceSession::LinkEvent event,
+                                            const std::string& detail)>;
+    void setLinkCallback(LinkCallback callback) { linkCallback_ = std::move(callback); }
+
     // 接管 transport 的所有权。返回的会话指针在 manager 生命周期内保持有效。
     DeviceSession* addDevice(DeviceConfig config,
                              std::unique_ptr<transport::TransportInterface> transport);
@@ -42,6 +48,13 @@ public:
     bool startAll();
     void stopAll();
     void tick(uint64_t nowMs);
+    // 一次 tick 所有设备：等价于对每台设备调用 session->tick(nowMs)。
+    // 保留 tick 这个名字（它是"推进时钟"），并发调度策略由 tick 内部决定。
+
+    // 主动驱动所有链路收一次数据（阶段 11）。
+    // 无界面网关的每轮循环必须调用它 —— 对 Qt 链路是空操作，
+    // 对原生链路才是真正把 socket 里的字节取出来。
+    void pump();
 
     std::size_t deviceCount() const { return entries_.size(); }
     std::vector<std::string> deviceNames() const;
@@ -49,17 +62,16 @@ public:
     transport::TransportState state(const std::string& name) const;
 
 private:
-    // 成员顺序即析构顺序（逆序）：state -> transport -> session，
+    // 成员顺序即析构顺序（逆序）：transport -> session，
     // 保证链路先拆掉，回调不会再打到一个已经销毁的会话上。
     struct Entry {
         std::unique_ptr<DeviceSession> session;
         std::unique_ptr<transport::TransportInterface> transport;
-        std::shared_ptr<transport::TransportState> state =
-            std::make_shared<transport::TransportState>(transport::TransportState::Closed);
     };
 
     std::vector<Entry> entries_;
     ResultCallback resultCallback_;
+    LinkCallback linkCallback_;
 };
 
 }  // namespace gateway::device

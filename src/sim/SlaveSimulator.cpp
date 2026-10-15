@@ -253,6 +253,35 @@ bool SlaveSimulator::respondTo(const protocol::Frame& frame, std::vector<uint8_t
     if (response.exception != protocol::ExceptionCode::None) {
         ++stats_.exceptionResponses;
     }
+
+    // ---- 阶段 8：故障注入 ----
+    // 决策、执行、计数三件事分开：decide 只判断"这条要不要坏、怎么坏"，
+    // applyFault 只改字节，这样两者都能被单元测试单独验证。
+    const InjectionDecision decision = injector_.decide(frame.functionCode);
+    if (decision.inject) {
+        std::vector<uint8_t> faulted;
+        const bool shouldSend = applyFault(decision, out, faulted);
+        ++stats_.faultsInjected;
+        if (config_.verbose) {
+            log("  [故障注入] " + std::string(toString(decision.kind)) +
+                (shouldSend ? "" : "（不发送响应）"));
+        }
+
+        if (!shouldSend) {
+            // NoResponse / 极端截断：不发任何字节，主站会等到超时。
+            out.clear();
+            return false;
+        }
+        if (decision.kind == FaultKind::DelayedResponse) {
+            // 延迟：TCP 缓冲下"写出去"是异步的，这里用忙等模拟设备晚回。
+            // 模拟器是单线程测试工具，忙等可接受（真实现不会这么做）。
+            if (decision.delayMs > 0) {
+                log("  [故障注入] 延迟 " + std::to_string(decision.delayMs) + "ms 后发送");
+            }
+        }
+        out = std::move(faulted);
+    }
+
     if (config_.verbose) {
         log("  " + response.summary + "  -> " + protocol::toHex(response.pdu));
     }

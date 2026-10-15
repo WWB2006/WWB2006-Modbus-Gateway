@@ -1,0 +1,60 @@
+[Unit]
+Description=Modbus 采集网关（常驻，无界面）
+Documentation=file:///opt/modbus-gateway/docs/部署与运维.md
+# 网络就绪后再启动：网关启动时会立刻尝试连接各台设备，
+# 早于网络启动会白白走一轮重连退避（虽然能自愈，但日志会很难看）。
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=modbus
+Group=modbus
+WorkingDirectory=/opt/modbus-gateway
+
+# 配置文件与数据库路径都写绝对路径：systemd 不会做 shell 展开，
+# 相对路径会以 WorkingDirectory 为基准，改 WorkingDirectory 时会静默指到别处。
+ExecStart=/opt/modbus-gateway/bin/gateway_daemon /etc/modbus-gateway/gateway.json \
+    --db /var/lib/modbus-gateway/records.db \
+    --export-csv /var/log/modbus-gateway/last-run.csv
+
+# SIGTERM 是网关实现的优雅退出信号：先停轮询、再 flush 未落盘数据、最后关库。
+# 所以这里必须用默认的 SIGTERM，不能改成 SIGKILL —— 那会丢掉最后一批缓冲样本。
+KillSignal=SIGTERM
+# 给落盘留时间。数据库在机械盘上时 flush 可能到百毫秒级。
+TimeoutStopSec=20
+
+# 异常退出就重启。网关本身有断线重连，但进程级崩溃（例如数据库文件被删）
+# 只能靠 systemd 拉起来。on-failure 而不是 always：正常退出（收到 SIGTERM）不重启。
+Restart=on-failure
+RestartSec=5s
+
+# 日志走 journald，用 journalctl -u modbus-gateway -f 查看。
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=modbus-gateway
+
+# --- 安全加固（现场机器往往不止跑这一个服务）---
+# 只需要写自己的数据目录与日志目录，其余文件系统只读。
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/modbus-gateway /var/log/modbus-gateway
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+# 采集只需要 IPv4/IPv6 套接字与普通文件读写。
+# 注意 AF_NETLINK 要保留：getaddrinfo 在某些 glibc 版本上会用到它，
+# 去掉之后用主机名（而非 IP）配的设备会解析失败。
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+# 单进程、单线程的轮询模型，不需要 fork 能力。
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target

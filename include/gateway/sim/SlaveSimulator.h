@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "gateway/sim/FaultInjector.h"
 #include "gateway/sim/RequestHandler.h"
 #include "gateway/transport/ByteAccumulator.h"
 
@@ -47,6 +48,7 @@ public:
         uint64_t exceptionResponses = 0;
         uint64_t ignoredRequests = 0;   // 单元号不匹配 / 广播，未应答
         uint64_t malformedFrames = 0;   // 协议标识或长度字段非法
+        uint64_t faultsInjected = 0;    // 阶段 8：按规则注入的故障次数
     };
 
     SlaveSimulator(RegisterMap& map, Config config);
@@ -68,10 +70,16 @@ public:
     void run();
 
     void requestStop() noexcept { stopRequested_ = true; }
+    bool stopRequested() const noexcept { return stopRequested_; }
 
     const Stats& stats() const noexcept { return stats_; }
     const std::string& error() const noexcept { return error_; }
     const Config& config() const noexcept { return config_; }
+
+    // 阶段 8：故障注入引擎。外部（配置加载 / 测试）往里加规则，
+    // 模拟器在处理每条请求时按规则决定"这条响应怎么坏"。
+    FaultInjector& injector() noexcept { return injector_; }
+    const FaultInjector& injector() const noexcept { return injector_; }
 
     // 已连接客户端数（测试里用来确认 accept 是否成功）。
     std::size_t clientCount() const noexcept { return clients_.size(); }
@@ -100,6 +108,7 @@ private:
     RegisterMap* map_ = nullptr;
     Config config_;
     RequestHandler handler_;
+    FaultInjector injector_;
     std::vector<Client> clients_;
     Stats stats_;
     std::string error_;

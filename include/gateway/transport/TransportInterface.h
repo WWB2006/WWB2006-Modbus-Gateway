@@ -45,6 +45,12 @@ struct TransportConfig {
 // 于是 TCP、串口，以及测试用的假链路都能塞进同一套设备层代码。
 //
 // 刻意不依赖 Qt，因此可以用假链路在没有网络与硬件的情况下驱动整个设备层做测试。
+//
+// 回调设计：每个回调槽**只允许一个订阅者**（后注册的覆盖先注册的）。
+// 早期版本里 DeviceSession::attach() 与 DeviceManager::addDevice() 都注册了 onState，
+// 后者把前者覆盖掉，导致「掉线触发重连」的处理器被静默替换、重连失效。
+// 现在明确约定：**状态由会话统一持有并转发**，DeviceManager 通过 session 读状态，
+// 不再自己注册 onState，避免同一份状态有两个"所有者"。
 class TransportInterface {
 public:
     using BytesCallback = std::function<void(const uint8_t*, std::size_t)>;
@@ -60,6 +66,22 @@ public:
     virtual TransportKind kind() const = 0;
     virtual std::string describe() const = 0;
 
+    // 当前链路状态。由 notifyState 维护，供上层随时查询。
+    TransportState state() const noexcept { return state_; }
+
+    // -----------------------------------------------------------------------
+    // 主动驱动一次「收数据」（阶段 11）。
+    //
+    // 为什么需要它：字节送到 notifyBytes 有两条路——
+    //   - Qt 链路（TcpTransport/SerialTransport）：Qt 事件循环自动投递，不需要外部驱动；
+    //   - 原生链路（NativeTcpTransport）：没有事件循环，必须由主循环轮询 socket。
+    // 所以基类给一个**空实现**：Qt 链路继承默认行为，原生链路覆写它。
+    //
+    // 不用「在 isOpen() 里顺手读一把」这种隐式做法：那会让一个查询函数产生副作用，
+    // 调用方无法控制读的时机，也让「为什么这里会收到数据」变得不可追踪。
+    // -----------------------------------------------------------------------
+    virtual void pump() {}
+
     void onBytes(BytesCallback callback) { bytesCallback_ = std::move(callback); }
     void onState(StateCallback callback) { stateCallback_ = std::move(callback); }
     void onMessage(MessageCallback callback) { messageCallback_ = std::move(callback); }
@@ -71,6 +93,7 @@ protected:
         }
     }
     void notifyState(TransportState state) {
+        state_ = state;
         if (stateCallback_) {
             stateCallback_(state);
         }
@@ -85,6 +108,7 @@ private:
     BytesCallback bytesCallback_;
     StateCallback stateCallback_;
     MessageCallback messageCallback_;
+    TransportState state_ = TransportState::Closed;
 };
 
 }  // namespace gateway::transport

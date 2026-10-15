@@ -1,0 +1,133 @@
+name: CI
+
+# 阶段 10：双平台持续集成。
+#
+# 三个 job，各自回答一个不同的问题：
+#   core-no-qt   —— 「没装 Qt 能不能构建、能不能测」。这是本项目对外的核心承诺
+#                   （README 方式三），必须由 CI 而不是靠"我这台机器上没问题"来保证。
+#   full-linux   —— Linux 全量构建（含 Qt 界面 + 串口）并跑端到端验收。
+#                   部署目标机就是 Ubuntu，这个 job 是"能不能上线"的答案。
+#   full-windows —— Windows 全量构建。开发机是 Windows，界面与串口在真机上跑。
+#
+# 为什么端到端脚本放在 core-no-qt 而不是 full-linux：
+#   它需要的是 slave_simulator 与 gateway_daemon，这两个都不依赖 Qt。
+#   放在无 Qt 的 job 里跑，等于顺手证明了「整条采集链路在裸机上可用」——
+#   这正是阶段 11 无界面网关要交付的能力。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. 无 Qt 构建：验证「不装 Qt 也能构建并测试」这个对外承诺
+  # ---------------------------------------------------------------------------
+  core-no-qt:
+    name: 无 Qt 核心构建 + 端到端（Ubuntu）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装构建依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build
+
+      - name: 配置（不提供 Qt，验证核心可独立构建）
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: 构建
+        run: cmake --build build --parallel
+
+      - name: ctest（可移植测试套件）
+        working-directory: build
+        run: ctest --output-on-failure
+
+      - name: 可移植测试脚本（第二条构建路径，与 CMake 互为对照）
+        run: ./scripts/build_portable_tests.sh
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 端到端验收（模拟器 → 常驻网关 → SQLite → CSV）
+        run: python scripts/e2e_gateway.py --build-dir build_portable
+
+  # ---------------------------------------------------------------------------
+  # 2. Linux 全量构建：Qt 界面 + 串口 + 端到端
+  # ---------------------------------------------------------------------------
+  full-linux:
+    name: 全量构建（Ubuntu + Qt6）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Qt6 与构建依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake ninja-build \
+            qt6-base-dev qt6-base-dev-tools libqt6serialport6-dev \
+            libgl1-mesa-dev
+
+      - name: 配置
+        run: cmake -S . -B build-linux -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: 构建
+        run: cmake --build build-linux --parallel
+
+      - name: ctest（含 Qt Test 用例）
+        working-directory: build-linux
+        run: ctest --output-on-failure
+
+      - name: 确认界面与串口目标真的生成了
+        run: |
+          test -x build-linux/src/modbus_gateway || { echo "缺少界面程序 modbus_gateway"; exit 1; }
+          test -x build-linux/src/gateway_daemon  || { echo "缺少 gateway_daemon"; exit 1; }
+          echo "界面程序与常驻网关均已生成"
+
+  # ---------------------------------------------------------------------------
+  # 3. Windows 全量构建
+  # ---------------------------------------------------------------------------
+  full-windows:
+    name: 全量构建（Windows + Qt6）
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 用 aqt 装 Qt6。这里刻意选 MinGW 版而不是 MSVC 版：
+      # 本项目的可移植构建脚本用的是 g++，两套工具链编出的产物行为要一致才好排查。
+      # 同时 MinGW 版不需要额外配置 MSVC 环境，CI 步骤更少、更少出错。
+      - name: 安装 Qt6
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.6.3'
+          host: windows
+          target: desktop
+          arch: win64_mingw
+          modules: 'qtserialport'
+          cache: true
+
+      - name: 配置
+        run: cmake -S . -B build -G "Ninja" -DCMAKE_BUILD_TYPE=Release
+
+      - name: 构建
+        run: cmake --build build --parallel
+
+      - name: ctest
+        working-directory: build
+        run: ctest --output-on-failure
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 端到端验收（用 CMake 产物再跑一遍）
+        run: python scripts/e2e_gateway.py --build-dir build/src
+
+      - name: 可移植测试脚本（第二条构建路径）
+        shell: pwsh
+        run: ./scripts/build_portable_tests.ps1

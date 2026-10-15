@@ -32,6 +32,18 @@ DeviceSession::DeviceSession(DeviceConfig config) : config_(std::move(config)) {
 void DeviceSession::attach(transport::TransportInterface& transport) {
     transport_ = &transport;
     transport.onBytes([this](const uint8_t* data, std::size_t len) { onBytes(data, len); });
+    // 阶段 9：监听链路状态变化，掉线即安排重连。
+    transport.onState([this](transport::TransportState state) {
+        if (state == transport::TransportState::Error ||
+            state == transport::TransportState::Closed) {
+            // 主动 close（比如程序退出）不算故障：只有"本该连着却断了"才重连。
+            // 这里用 linkWasDown_ 做闸门，避免 onState 反复触发导致重复安排。
+            if (!reconnectScheduled_ && config_.reconnect.enabled && !stopRequested_) {
+                scheduleReconnect(nowMs_, std::string("链路断开：") +
+                                              transport::toString(state));
+            }
+        }
+    });
 }
 
 bool DeviceSession::beginTransaction(uint8_t functionCode, uint16_t address, uint16_t count,
@@ -104,6 +116,9 @@ bool DeviceSession::sendPending(uint64_t nowMs) {
 
     // 先更新状态再发出：真实链路是异步的，但同步的测试替身会在 send 内部立刻回调，
     // 提前写好 attempts 与 deadline 可以避免这种再入把状态改坏。
+    if (pending_.attempts == 0) {
+        pending_.firstSentMs = nowMs;  // 只记第一次，重传不覆盖
+    }
     pending_.attempts += 1;
     pending_.deadlineMs = nowMs + config_.timeoutMs;
     state_ = SessionState::WaitingResponse;
@@ -117,6 +132,16 @@ bool DeviceSession::sendPending(uint64_t nowMs) {
 
 void DeviceSession::tick(uint64_t nowMs) {
     nowMs_ = nowMs;
+
+    // 阶段 9：先处理重连倒计时。倒计时期间不发起新的轮询请求，
+    // 否则会往一个已经断开的链路里塞请求、每次都失败并刷爆日志。
+    if (reconnectScheduled_) {
+        if (nowMs_ < nextReconnectAtMs_) {
+            return;
+        }
+        attemptReconnect();
+        return;
+    }
 
     if (pending_.active) {
         if (nowMs_ < pending_.deadlineMs) {
@@ -167,6 +192,14 @@ void DeviceSession::tick(uint64_t nowMs) {
         default:
             // 未支持的轮询功能码：本轮跳过，等下一次轮询时机，不阻塞其它点位。
             break;
+    }
+}
+
+void DeviceSession::pump() {
+    // 会话不解释字节，只负责把「该收数据了」这件事转达给链路。
+    // 收到的字节会经由 attach() 注册的 onBytes 回调回到 onBytes()。
+    if (transport_ != nullptr) {
+        transport_->pump();
     }
 }
 
@@ -284,11 +317,131 @@ void DeviceSession::failPending(const std::string& reason) {
 }
 
 void DeviceSession::resolve(const TransactionResult& result) {
+    // 补上本次事务的总耗时：从第一次发出（而不只是最后一次重传）算起，
+    // 这样重传带来的延迟才不会在指标里"消失"。
+    TransactionResult stamped = result;
+    if (pending_.active) {
+        stamped.latencyMs = static_cast<uint32_t>(nowMs_ >= pending_.firstSentMs
+                                                      ? nowMs_ - pending_.firstSentMs
+                                                      : 0);
+    }
     pending_ = Pending{};
     state_ = SessionState::Idle;
     nextPollAtMs_ = nowMs_ + config_.pollIntervalMs;
     if (resultCallback_) {
-        resultCallback_(result);
+        resultCallback_(stamped);
+    }
+}
+
+// ------------------------------------------------ 阶段 9：断线重连
+
+uint32_t DeviceSession::backoffDelayMs() const {
+    const ReconnectPolicy& policy = config_.reconnect;
+    // 前 failuresBeforeBackoff 次失败不进入退避，用初始延迟快速重试
+    // （现场多数掉线是瞬时的，快速重试能立刻恢复）。
+    if (consecutiveReconnectFailures_ < policy.failuresBeforeBackoff) {
+        return policy.initialDelayMs;
+    }
+    // 之后指数增长：initial * multiplier^(失败次数 - 阈值)，封顶 maxDelayMs。
+    const uint32_t exponent = consecutiveReconnectFailures_ - policy.failuresBeforeBackoff;
+    uint64_t delay = policy.initialDelayMs;
+    const uint32_t multiplier = policy.multiplier == 0 ? 2 : policy.multiplier;
+    for (uint32_t i = 0; i < exponent; ++i) {
+        delay *= multiplier;
+        // 提前封顶，避免 32 次失败后 overflow。
+        if (delay >= policy.maxDelayMs) {
+            return policy.maxDelayMs;
+        }
+    }
+    return static_cast<uint32_t>(delay);
+}
+
+void DeviceSession::scheduleReconnect(uint64_t nowMs, const std::string& reason) {
+    if (stopRequested_ || !config_.reconnect.enabled) {
+        return;
+    }
+    // 掉线时把在途事务判失败，否则它会一直"等响应"直到超时，
+    // 让上层误以为设备还在。
+    if (pending_.active) {
+        TransactionResult result;
+        result.functionCode = pending_.functionCode;
+        result.address = pending_.address;
+        result.count = pending_.count;
+        result.error = "链路断开，事务中止：" + reason;
+        resolve(result);
+    }
+    // 清空接收缓冲：断开后残留的半帧是垃圾数据，留着会让重连后的第一帧解析错位。
+    accumulator_.clear();
+
+    reconnectScheduled_ = true;
+    nextReconnectAtMs_ = nowMs + backoffDelayMs();
+    state_ = SessionState::Failed;
+    if (linkCallback_) {
+        linkCallback_(LinkEvent::Down, reason);
+    }
+}
+
+bool DeviceSession::attemptReconnect() {
+    if (transport_ == nullptr || stopRequested_) {
+        reconnectScheduled_ = false;
+        return false;
+    }
+    stats_.reconnectAttempts += 1;
+
+    // 链路已经是开的（比如 TCP 自己重连成功了）就直接恢复。
+    if (transport_->isOpen()) {
+        reconnectScheduled_ = false;
+        consecutiveReconnectFailures_ = 0;
+        state_ = SessionState::Idle;
+        nextPollAtMs_ = nowMs_;  // 立刻允许下一轮轮询
+        stats_.reconnects += 1;
+        if (linkCallback_) {
+            linkCallback_(LinkEvent::Recovered, "链路已恢复");
+        }
+        return true;
+    }
+
+    if (transport_->open()) {
+        reconnectScheduled_ = false;
+        consecutiveReconnectFailures_ = 0;
+        state_ = SessionState::Idle;
+        nextPollAtMs_ = nowMs_;
+        stats_.reconnects += 1;
+        if (linkCallback_) {
+            linkCallback_(LinkEvent::Recovered, "重连成功");
+        }
+        return true;
+    }
+
+    // 失败：累加失败次数，按退避策略安排下一次。
+    consecutiveReconnectFailures_ += 1;
+    nextReconnectAtMs_ = nowMs_ + backoffDelayMs();
+    if (linkCallback_) {
+        linkCallback_(LinkEvent::Reconnecting,
+                      "第 " + std::to_string(consecutiveReconnectFailures_) +
+                          " 次重连失败，下次在 " + std::to_string(backoffDelayMs()) + "ms 后");
+    }
+    return false;
+}
+
+transport::TransportState DeviceSession::linkState() const {
+    if (transport_ == nullptr) {
+        return transport::TransportState::Closed;
+    }
+    return transport_->state();
+}
+
+void DeviceSession::stop() {
+    stopRequested_ = true;
+    autoPoll_ = false;
+    reconnectScheduled_ = false;
+    if (pending_.active) {
+        TransactionResult result;
+        result.functionCode = pending_.functionCode;
+        result.address = pending_.address;
+        result.count = pending_.count;
+        result.error = "会话已停止";
+        resolve(result);
     }
 }
 

@@ -18,7 +18,8 @@ logs/
 *.db-wal
 *.csv
 
-# Python（pytest 端到端测试，阶段 10 规划；当前交叉验证走 scripts/verify_simulator.py）
+# Python（端到端验收 scripts/e2e_gateway.py 与交叉验证 scripts/verify_simulator.py，
+# 两者都只用标准库 + pymodbus，不依赖 pytest）
 .venv/
 __pycache__/
 *.pyc

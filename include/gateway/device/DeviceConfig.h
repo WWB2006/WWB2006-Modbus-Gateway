@@ -19,6 +19,24 @@ struct PollPoint {
     uint16_t value = 0;
 };
 
+// 阶段 9：断线重连策略（指数退避）。
+//
+// 为什么需要退避而不是"立刻重连"：
+//   现场设备掉电或网线被拔时，如果每秒重连几十次，会把设备的 TCP 连接表打满，
+//   设备恢复后反而因为资源耗尽连不上。指数退避（1s → 2s → 4s → … → 上限）
+//   既保证恢复后能较快接上，又不会在长时间故障中拖垮设备。
+struct ReconnectPolicy {
+    bool enabled = true;
+    // 首次重连延迟（毫秒）。
+    uint32_t initialDelayMs = 1000;
+    // 退避上限（毫秒）。指数增长到这里就封顶，避免退避到几十分钟。
+    uint32_t maxDelayMs = 30000;
+    // 退避倍率。2 = 每次都翻倍。
+    uint32_t multiplier = 2;
+    // 连续失败多少次后进入退避（前几次立即重试）。
+    uint32_t failuresBeforeBackoff = 2;
+};
+
 // 一台设备的采集配置，字段与 config/gateway.json 一一对应。
 struct DeviceConfig {
     std::string name;
@@ -28,6 +46,9 @@ struct DeviceConfig {
     uint8_t retry = 3;  // 最多重传次数，总尝试次数 = retry + 1
     uint16_t pollIntervalMs = 500;
     std::vector<PollPoint> points;
+
+    // 阶段 9：断线自动恢复策略。
+    ReconnectPolicy reconnect;
 
     // —— 链路参数：与 gateway.json 中的连接字段一一对应 ——
     // TCP
