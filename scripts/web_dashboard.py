@@ -244,7 +244,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return {"status": "ERROR", "message": str(e)}
 
 def main():
-    port = 8080
+    import argparse
+    parser = argparse.ArgumentParser(description="Modbus Industrial Gateway Web Dashboard")
+    parser.add_argument("-p", "--port", type=int, default=8081, help="Port to listen on (default: 8081)")
+    args = parser.parse_args()
+
+    port = args.port
     server_address = ("0.0.0.0", port)
     httpd = HTTPServer(server_address, DashboardHandler)
 
