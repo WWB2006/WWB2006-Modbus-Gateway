@@ -62,18 +62,18 @@ bool parseOptions(int argc, char** argv, Options& options, std::string& error) {
             printUsage();
             std::exit(0);
         }
-        if (arg == "--quiet") {
+        if (arg == "--quiet" || arg == "-q") {
             options.hasVerbose = true;
             options.verbose = false;
             continue;
         }
-        if (arg == "--port" || arg == "--bind" || arg == "--unit") {
+        if (arg == "--port" || arg == "-p" || arg == "--bind" || arg == "-b" || arg == "--unit" || arg == "-u") {
             if (i + 1 >= argc) {
                 error = arg + " 后面需要跟一个值";
                 return false;
             }
             const std::string value = argv[++i];
-            if (arg == "--port") {
+            if (arg == "--port" || arg == "-p") {
                 char* end = nullptr;
                 const long parsed = std::strtol(value.c_str(), &end, 10);
                 if (end == nullptr || *end != '\0' || parsed < 1 || parsed > 65535) {
@@ -82,7 +82,7 @@ bool parseOptions(int argc, char** argv, Options& options, std::string& error) {
                 }
                 options.hasPort = true;
                 options.port = parsed;
-            } else if (arg == "--unit") {
+            } else if (arg == "--unit" || arg == "-u") {
                 char* end = nullptr;
                 const long parsed = std::strtol(value.c_str(), &end, 10);
                 if (end == nullptr || *end != '\0' || parsed < 0 || parsed > 255) {

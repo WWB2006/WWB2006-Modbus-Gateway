@@ -123,6 +123,14 @@ bool parseOptions(int argc, char** argv, Options& options, std::string& error) {
             options.dryRun = true;
             continue;
         }
+        if (arg == "-c" || arg == "--config") {
+            if (i + 1 >= argc) {
+                error = arg + " 后面需要指定配置文件路径";
+                return false;
+            }
+            options.configPath = argv[++i];
+            continue;
+        }
         if (arg == "--db" || arg == "--seconds" || arg == "--poll" || arg == "--stop-file" ||
             arg == "--export-csv") {
             if (i + 1 >= argc) {
