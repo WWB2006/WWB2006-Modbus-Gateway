@@ -5,6 +5,8 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 
+mkdir -p data logs
+
 build_dir="${1:-build-linux}"
 
 cmake -B "$build_dir" -DCMAKE_BUILD_TYPE=Release

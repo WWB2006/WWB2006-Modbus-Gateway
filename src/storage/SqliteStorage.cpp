@@ -2,6 +2,7 @@
 
 #include <sqlite3.h>
 
+#include <filesystem>
 #include <sstream>
 
 namespace gateway::storage {
@@ -34,6 +35,14 @@ bool SqliteStorage::open(std::string& error) {
     error.clear();
     if (db_ != nullptr) {
         return true;
+    }
+
+    if (!path_.empty() && path_ != ":memory:") {
+        std::error_code ec;
+        const auto parent = std::filesystem::path(path_).parent_path();
+        if (!parent.empty()) {
+            std::filesystem::create_directories(parent, ec);
+        }
     }
 
     // SQLITE_OPEN_FULLMUTEX：允许跨线程使用同一连接（阶段 9 的并发调度会用到）。
