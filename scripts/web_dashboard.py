@@ -243,6 +243,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
         except Exception as e:
             return {"status": "ERROR", "message": str(e)}
 
+class ReusableHTTPServer(HTTPServer):
+    allow_reuse_address = True
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="Modbus Industrial Gateway Web Dashboard")
@@ -251,7 +254,7 @@ def main():
 
     port = args.port
     server_address = ("0.0.0.0", port)
-    httpd = HTTPServer(server_address, DashboardHandler)
+    httpd = ReusableHTTPServer(server_address, DashboardHandler)
 
     print("================================================================")
     print(f" Modbus Industrial Gateway Web Dashboard listening on port {port}")
