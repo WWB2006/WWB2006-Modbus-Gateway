@@ -52,9 +52,6 @@ const QtTransportRegistrar& qtRegistrar() {
     return registrar;
 }
 
-// 引用一下，确保编译器不会把从未使用的静态初始化优化掉。
-const void* const kRegistrarAnchor = &qtRegistrar;
-
 }  // namespace
 
 std::unique_ptr<TransportInterface> createTransport(const TransportConfig& config,
@@ -62,7 +59,7 @@ std::unique_ptr<TransportInterface> createTransport(const TransportConfig& confi
     out_error.clear();
 
     // 先确保注册已完成（首次调用时触发器构造）。
-    (void)kRegistrarAnchor;
+    (void)qtRegistrar();
 
     switch (config.kind) {
         case TransportKind::Tcp:
@@ -86,7 +83,7 @@ std::unique_ptr<TransportInterface> createTransport(const TransportConfig& confi
 
 bool isTransportAvailable(TransportKind kind) {
     // 与 createTransport 同样先确保注册表可用。
-    (void)kRegistrarAnchor;
+    (void)qtRegistrar();
 
     switch (kind) {
         case TransportKind::Tcp:
