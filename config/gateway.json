@@ -9,37 +9,31 @@
       "pollIntervalMs": 500,
       "timeoutMs": 1000,
       "retry": 3,
-      "points": [ { "func": 3, "address": 0, "count": 10 } ]
+      "points": [
+        { "func": 3, "address": 0, "count": 10 }
+      ]
     },
     {
       "name": "meter-02",
-      "transport": "rtu",
-      "serialPort": "COM11",
-      "baudRate": 9600,
-      "parity": "N",
-      "dataBits": 8,
-      "stopBits": 1,
-      "unitId": 2,
+      "transport": "tcp",
+      "host": "127.0.0.1",
+      "port": 5020,
+      "unitId": 1,
       "pollIntervalMs": 1000,
       "timeoutMs": 1000,
       "retry": 3,
-      "points": [ { "func": 4, "address": 0, "count": 4 } ]
-    },
-    {
-      "name": "vfd-03",
-      "transport": "tcp",
-      "host": "192.168.1.30",
-      "port": 502,
-      "unitId": 3,
-      "pollIntervalMs": 2000,
-      "timeoutMs": 1000,
-      "retry": 2,
       "points": [
-        { "func": 3, "address": 0, "count": 8 },
-        { "func": 6, "address": 8192, "count": 1, "value": 1 }
+        { "func": 4, "address": 0, "count": 4 }
       ]
     }
   ],
-  "storage": { "database": "data/records.db", "batchSize": 500 },
-  "logging": { "level": "info", "rotateSizeMb": 32 }
+  "storage": {
+    "database": "data/records.db",
+    "batchSize": 10
+  },
+  "logging": {
+    "level": "info",
+    "file": "logs/gateway.log",
+    "rotateSizeMb": 32
+  }
 }
