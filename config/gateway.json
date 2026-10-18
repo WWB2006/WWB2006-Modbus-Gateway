@@ -19,7 +19,7 @@
       "host": "127.0.0.1",
       "port": 5020,
       "unitId": 1,
-      "pollIntervalMs": 800,
+      "pollIntervalMs": 1000,
       "timeoutMs": 1000,
       "retry": 3,
       "points": [
@@ -29,7 +29,7 @@
   ],
   "storage": {
     "database": "data/records.db",
-    "batchSize": 500
+    "batchSize": 10
   },
   "logging": {
     "level": "info",
