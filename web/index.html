@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Modbus 工业网关与自动化测试平台 - 实时监控大屏</title>
+  <style>
+    :root {
+      --bg: #0f141c;
+      --panel: #161d2a;
+      --panel-border: #222e42;
+      --accent-blue: #0088ff;
+      --accent-cyan: #00d2ff;
+      --accent-green: #00e676;
+      --accent-amber: #ffb300;
+      --accent-red: #ff3d57;
+      --accent-purple: #b388ff;
+      --text: #e2e8f0;
+      --text-muted: #8295b0;
+      --card-bg: #1b2434;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      padding: 18px 24px;
+      line-height: 1.4;
+      overflow-x: hidden;
+    }
+
+    /* Header */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--panel-border);
+      margin-bottom: 20px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .logo-badge {
+      background: linear-gradient(135deg, #0088ff, #00d2ff);
+      color: #fff;
+      font-weight: 900;
+      font-size: 14px;
+      padding: 6px 10px;
+      border-radius: 8px;
+      letter-spacing: 1px;
+      box-shadow: 0 0 15px rgba(0, 136, 255, 0.4);
+    }
+    .brand-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: 0.5px;
+    }
+    .brand-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .sys-time {
+      font-family: Consolas, monospace;
+      font-size: 14px;
+      color: var(--accent-cyan);
+      background: var(--card-bg);
+      padding: 6px 14px;
+      border-radius: 6px;
+      border: 1px solid var(--panel-border);
+    }
+
+    /* Grid Layout */
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .grid-2-1 {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      padding: 16px;
+      position: relative;
+      overflow: hidden;
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+    .card-val {
+      font-size: 28px;
+      font-weight: 800;
+      color: #fff;
+      font-family: Consolas, monospace;
+    }
+    .card-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .status-ok { background: rgba(0, 230, 118, 0.15); color: var(--accent-green); border: 1px solid var(--accent-green); }
+    .status-warn { background: rgba(255, 179, 0, 0.15); color: var(--accent-amber); border: 1px solid var(--accent-amber); }
+    .status-err { background: rgba(255, 61, 87, 0.15); color: var(--accent-red); border: 1px solid var(--accent-red); }
+
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      box-shadow: 0 0 10px var(--accent-green);
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(1.3); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+
+    /* Gauges */
+    .telemetry-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+    .gauge-item {
+      background: var(--card-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 8px;
+      padding: 12px;
+    }
+    .gauge-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+    .gauge-val {
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--accent-cyan);
+      font-family: Consolas, monospace;
+      margin-top: 4px;
+    }
+
+    /* Chart Canvas */
+    .chart-container {
+      height: 220px;
+      width: 100%;
+      position: relative;
+    }
+    canvas {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Interactive Buttons */
+    .btn-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .btn {
+      padding: 8px 16px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 12px;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn:hover { transform: translateY(-1px); filter: brightness(1.15); }
+    .btn:active { transform: translateY(1px); }
+    .btn-blue { background: #007acc; color: #fff; }
+    .btn-amber { background: #d97706; color: #fff; }
+    .btn-red { background: #dc2626; color: #fff; }
+    .btn-purple { background: #7c3aed; color: #fff; }
+    .btn-green { background: #059669; color: #fff; }
+
+    /* Tables */
+    .table-container {
+      max-height: 280px;
+      overflow-y: auto;
+      border-radius: 8px;
+      border: 1px solid var(--panel-border);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 12px;
+    }
+    th {
+      background: var(--card-bg);
+      color: var(--text-muted);
+      padding: 10px 12px;
+      font-weight: 600;
+      position: sticky;
+      top: 0;
+      border-bottom: 1px solid var(--panel-border);
+    }
+    td {
+      padding: 8px 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      font-family: Consolas, monospace;
+    }
+    tr:hover { background: rgba(255, 255, 255, 0.02); }
+
+    /* Terminal Log */
+    .terminal {
+      background: #090d14;
+      border: 1px solid var(--panel-border);
+      border-radius: 8px;
+      padding: 12px;
+      font-family: Consolas, monospace;
+      font-size: 11px;
+      color: #a0aec0;
+      height: 280px;
+      overflow-y: auto;
+    }
+    .log-line { margin-bottom: 4px; line-height: 1.5; }
+    .log-time { color: #4a5568; }
+    .log-ok { color: var(--accent-green); }
+    .log-warn { color: var(--accent-amber); }
+    .log-err { color: var(--accent-red); }
+
+    /* Form Controls */
+    .form-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-top: 10px;
+    }
+    input, select {
+      background: var(--card-bg);
+      border: 1px solid var(--panel-border);
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+    }
+    input:focus, select:focus {
+      outline: none;
+      border-color: var(--accent-blue);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="brand">
+      <div class="logo-badge">MODBUS GW</div>
+      <div>
+        <div class="brand-title">Modbus 工业网关与自动化测试平台</div>
+        <div class="brand-sub">Qt 6 / C++17 跨平台架构 | SQLite WAL 归档 | 自研异常注入引擎</div>
+      </div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 14px;">
+      <span class="status-pill status-ok"><span class="pulse-dot"></span> 系统正常运行中</span>
+      <div class="sys-time" id="clock">--:--:--</div>
+    </div>
+  </header>
+
+  <!-- 三项目协同快速导航 -->
+  <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; align-items: center;">
+    <span style="font-size: 13px; color: var(--text-muted);">🚀 工业协同项目集群：</span>
+    <a href="http://127.0.0.1:8080" target="_blank" style="padding: 6px 14px; border-radius: 8px; text-decoration: none; font-size: 13px; background: var(--card-bg); color: #7dd3fc; border: 1px solid var(--panel-border); transition: all 0.2s;">🌐 项目一：Reactor Web 服务 (:8080)</a>
+    <a href="/" style="padding: 6px 14px; border-radius: 8px; text-decoration: none; font-size: 13px; background: #222e42; color: #00d2ff; border: 1px solid #0088ff; font-weight: 600;">📡 项目二：Modbus 工业网关看板 (:8081)</a>
+    <a href="http://127.0.0.1:8000" target="_blank" style="padding: 6px 14px; border-radius: 8px; text-decoration: none; font-size: 13px; background: var(--card-bg); color: #fbbf24; border: 1px solid var(--panel-border); transition: all 0.2s;">📊 项目三：设备数据采集与测试报告平台 (:8000)</a>
+  </div>
+
+  <!-- KPI Top Row -->
+  <div class="grid-4">
+    <div class="card">
+      <div class="card-header">
+        <span>网关引擎状态</span>
+        <span class="status-pill status-ok" id="gw-status">ONLINE</span>
+      </div>
+      <div class="card-val" style="color: var(--accent-cyan);">RUNNING</div>
+      <div class="card-sub">并发设备: 2 | 周期: 500ms / 1000ms</div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span>从站模拟器</span>
+        <span class="status-pill status-ok" id="sim-status">:5020 TCP</span>
+      </div>
+      <div class="card-val" style="color: var(--accent-green);" id="req-counter">0</div>
+      <div class="card-sub">累计处理请求数 | 单元号: 1</div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span>通信成功率 / 延迟 P50</span>
+        <span style="color: var(--accent-green); font-weight: bold;" id="success-rate">100.0%</span>
+      </div>
+      <div class="card-val" id="p50-latency" style="color: #fff;">0.0 <span style="font-size: 16px; color: var(--text-muted);">ms</span></div>
+      <div class="card-sub" id="p95-latency">P95: 0.0ms | P99: 0.0ms</div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span>本地 Ubuntu 虚拟机</span>
+        <span class="status-pill status-ok" id="vm-status">ACTIVE</span>
+      </div>
+      <div class="card-val" style="font-size: 22px; color: var(--accent-amber);">192.168.71.129</div>
+      <div class="card-sub">VMware Workstation | SSH: 22 正常</div>
+    </div>
+  </div>
+
+  <!-- Row 2: Real-time Oscilloscope & Telemetry -->
+  <div class="grid-2-1">
+    <!-- Latency Chart -->
+    <div class="card">
+      <div class="card-header">
+        <span>动态通信延迟波形图 (Real-time Latency Waveform)</span>
+        <span style="font-size: 11px; color: var(--accent-cyan);">采样点窗口: 最近 60 点</span>
+      </div>
+      <div class="chart-container">
+        <canvas id="latencyCanvas"></canvas>
+      </div>
+    </div>
+
+    <!-- Live Telemetry Gauges -->
+    <div class="card">
+      <div class="card-header">
+        <span>实时工控量采集遥测 (PLC-01)</span>
+        <span class="status-pill status-ok">LIVE</span>
+      </div>
+      <div class="telemetry-grid">
+        <div class="gauge-item">
+          <div class="gauge-label">三相电压 (Reg 0)</div>
+          <div class="gauge-val" id="val-voltage">235.0 <span style="font-size: 12px; color: var(--text-muted);">V</span></div>
+        </div>
+        <div class="gauge-item">
+          <div class="gauge-label">母线电流 (Reg 1)</div>
+          <div class="gauge-val" id="val-current">4.85 <span style="font-size: 12px; color: var(--text-muted);">A</span></div>
+        </div>
+        <div class="gauge-item">
+          <div class="gauge-label">电网频率 (Reg 2)</div>
+          <div class="gauge-val" id="val-freq">50.02 <span style="font-size: 12px; color: var(--text-muted);">Hz</span></div>
+        </div>
+        <div class="gauge-item">
+          <div class="gauge-label">主轴温度 (Reg 4)</div>
+          <div class="gauge-val" style="color: var(--accent-amber);" id="val-temp">68.0 <span style="font-size: 12px; color: var(--text-muted);">°C</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 3: Fault Injection Control Center & Manual Point Write -->
+  <div class="grid-2-1">
+    <!-- Fault Injection Panel -->
+    <div class="card">
+      <div class="card-header">
+        <span>工业异常注入控制台 (Fault Injection Engine)</span>
+        <span style="color: var(--accent-amber); font-size: 11px;">点击实时注入仿真故障</span>
+      </div>
+      <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">
+        通过模拟器动态注入现场恶劣工况，验证网关超时重连与退避算法，观察延迟波形变化：
+      </p>
+      <div class="btn-row">
+        <button class="btn btn-amber" onclick="injectFault('delay')">⚡ 注入弱网延迟 (50-400ms)</button>
+        <button class="btn btn-red" onclick="injectFault('crc')">💥 注入 CRC 校验损坏 (20%)</button>
+        <button class="btn btn-purple" onclick="injectFault('exception')">⚠️ 注入从站忙异常码 (0x06)</button>
+        <button class="btn btn-red" onclick="injectFault('disconnect')">🔌 模拟网线拔出断网 (3s)</button>
+        <button class="btn btn-green" onclick="injectFault('normal')">✅ 恢复正常模式</button>
+      </div>
+      <div id="fault-toast" style="font-size: 12px; color: var(--accent-cyan); margin-top: 10px; min-height: 18px;"></div>
+    </div>
+
+    <!-- Manual Write -->
+    <div class="card">
+      <div class="card-header">
+        <span>点位手动下发 (Function 06)</span>
+        <span style="font-size: 11px; color: var(--text-muted);">Write Single Register</span>
+      </div>
+      <div class="form-row">
+        <input type="number" id="write-addr" value="0" min="0" max="9999" placeholder="寄存器地址" style="width: 100px;">
+        <input type="number" id="write-val" value="380" min="0" max="65535" placeholder="写入数值" style="width: 110px;">
+        <button class="btn btn-blue" onclick="writeRegister()">写入 (06)</button>
+      </div>
+      <div id="write-result" style="font-size: 11px; margin-top: 8px; color: var(--accent-green);"></div>
+    </div>
+  </div>
+
+  <!-- Row 4: Records Table & Logs -->
+  <div class="grid-2-1">
+    <!-- Live Records Table -->
+    <div class="card">
+      <div class="card-header">
+        <span>SQLite WAL 实时入库记录 (Recent Comm Records)</span>
+        <span style="font-size: 11px; color: var(--text-muted);">自动同步 data/records.db</span>
+      </div>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>时间戳</th>
+              <th>设备</th>
+              <th>功能码</th>
+              <th>点位值序列</th>
+              <th>耗时</th>
+              <th>状态</th>
+            </tr>
+          </thead>
+          <tbody id="records-body">
+            <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">正在加载通信数据...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Live Terminal Logs -->
+    <div class="card">
+      <div class="card-header">
+        <span>网关运行日志 (Live Gateway Logs)</span>
+        <span style="font-size: 11px; color: var(--accent-cyan);" id="log-count">0 行</span>
+      </div>
+      <div class="terminal" id="terminal-logs">
+        <div class="log-line"><span class="log-time">[INIT]</span> 网关监控大屏初始化完成...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // System Clock
+    function updateClock() {
+      const now = new Date();
+      document.getElementById('clock').innerText = now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0');
+    }
+    setInterval(updateClock, 50);
+
+    // Canvas Latency Oscilloscope
+    const canvas = document.getElementById('latencyCanvas');
+    const ctx = canvas.getContext('2d');
+    let latencyData = [];
+
+    function resizeCanvas() {
+      canvas.width = canvas.parentElement.clientWidth;
+      canvas.height = canvas.parentElement.clientHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    function drawChart() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const w = canvas.width;
+      const h = canvas.height;
+      const padding = { top: 20, right: 30, bottom: 25, left: 45 };
+      const plotW = w - padding.left - padding.right;
+      const plotH = h - padding.top - padding.bottom;
+
+      // Draw Grid
+      ctx.strokeStyle = '#222e42';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+
+      const maxVal = Math.max(50, ...latencyData, 10);
+      for (let i = 0; i <= 4; i++) {
+        const y = padding.top + (plotH * i) / 4;
+        ctx.beginPath();
+        ctx.moveTo(padding.left, y);
+        ctx.lineTo(padding.left + plotW, y);
+        ctx.stroke();
+
+        ctx.fillStyle = '#64748b';
+        ctx.font = '10px Consolas';
+        ctx.fillText(((4 - i) * maxVal / 4).toFixed(0) + 'ms', 8, y + 3);
+      }
+      ctx.setLineDash([]);
+
+      if (latencyData.length < 2) return;
+
+      // Gradient Fill
+      const gradient = ctx.createLinearGradient(0, padding.top, 0, padding.top + plotH);
+      gradient.addColorStop(0, 'rgba(0, 136, 255, 0.35)');
+      gradient.addColorStop(1, 'rgba(0, 136, 255, 0.0)');
+
+      ctx.beginPath();
+      const stepX = plotW / (latencyData.length - 1);
+      latencyData.forEach((val, i) => {
+        const x = padding.left + i * stepX;
+        const norm = Math.min(val / maxVal, 1.0);
+        const y = padding.top + plotH - (norm * plotH);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+
+      // Fill area
+      ctx.lineTo(padding.left + plotW, padding.top + plotH);
+      ctx.lineTo(padding.left, padding.top + plotH);
+      ctx.fillStyle = gradient;
+      ctx.fill();
+
+      // Stroke Line
+      ctx.beginPath();
+      latencyData.forEach((val, i) => {
+        const x = padding.left + i * stepX;
+        const norm = Math.min(val / maxVal, 1.0);
+        const y = padding.top + plotH - (norm * plotH);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = '#00d2ff';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+
+      // Draw last point dot
+      const lastX = padding.left + (latencyData.length - 1) * stepX;
+      const lastNorm = Math.min(latencyData[latencyData.length - 1] / maxVal, 1.0);
+      const lastY = padding.top + plotH - (lastNorm * plotH);
+      ctx.fillStyle = '#00e676';
+      ctx.beginPath();
+      ctx.arc(lastX, lastY, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Polling API Data
+    async function fetchData() {
+      try {
+        const [resMetrics, resRecords] = await Promise.all([
+          fetch('/api/metrics').then(r => r.json()),
+          fetch('/api/records?limit=15').then(r => r.json())
+        ]);
+
+        // Update KPIs
+        document.getElementById('req-counter').innerText = resMetrics.totalRequests || 0;
+        document.getElementById('success-rate').innerText = (resMetrics.successRate || 100).toFixed(1) + '%';
+        document.getElementById('p50-latency').innerHTML = (resMetrics.p50LatencyMs || 0).toFixed(1) + ' <span style="font-size: 16px; color: var(--text-muted);">ms</span>';
+        document.getElementById('p95-latency').innerText = `P95: ${(resMetrics.p95LatencyMs || 0).toFixed(1)}ms | P99: ${(resMetrics.p99LatencyMs || 0).toFixed(1)}ms`;
+
+        // Update Latency Data
+        if (resMetrics.recentLatencies && resMetrics.recentLatencies.length > 0) {
+          latencyData = resMetrics.recentLatencies.slice(-60);
+          drawChart();
+        }
+
+        // Update Table
+        if (resRecords && resRecords.length > 0) {
+          const tbody = document.getElementById('records-body');
+          tbody.innerHTML = resRecords.map(r => {
+            const statusClass = r.status === 'OK' ? 'status-ok' : (r.status.startsWith('EXCEPTION') ? 'status-warn' : 'status-err');
+            return `<tr>
+              <td>#${r.id}</td>
+              <td>${new Date(r.timestamp).toTimeString().split(' ')[0]}</td>
+              <td><span style="color: var(--accent-cyan);">${r.deviceName}</span></td>
+              <td>0x0${r.functionCode}</td>
+              <td style="color: #cbd5e1; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${r.valuesStr || '--'}</td>
+              <td>${r.latencyMs.toFixed(1)} ms</td>
+              <td><span class="status-pill ${statusClass}">${r.status}</span></td>
+            </tr>`;
+          }).join('');
+
+          // Update Telemetry Gauges from latest plc-01 record
+          const plcRecord = resRecords.find(r => r.deviceName === 'plc-01' && r.valuesStr);
+          if (plcRecord) {
+            const vals = plcRecord.valuesStr.split(',').map(Number);
+            if (vals.length >= 5) {
+              document.getElementById('val-voltage').innerHTML = (vals[0] / 10).toFixed(1) + ' <span style="font-size: 12px; color: var(--text-muted);">V</span>';
+              document.getElementById('val-current').innerHTML = (vals[1] / 100).toFixed(2) + ' <span style="font-size: 12px; color: var(--text-muted);">A</span>';
+              document.getElementById('val-freq').innerHTML = (vals[2] / 100).toFixed(2) + ' <span style="font-size: 12px; color: var(--text-muted);">Hz</span>';
+              document.getElementById('val-temp').innerHTML = vals[4].toFixed(1) + ' <span style="font-size: 12px; color: var(--text-muted);">°C</span>';
+            }
+          }
+
+          // Add to Terminal Log
+          const latest = resRecords[0];
+          addLogLine(latest);
+        }
+      } catch (err) {
+        console.error('Fetch error:', err);
+      }
+    }
+
+    let lastLoggedId = 0;
+    function addLogLine(r) {
+      if (r.id <= lastLoggedId) return;
+      lastLoggedId = r.id;
+
+      const term = document.getElementById('terminal-logs');
+      const timeStr = new Date(r.timestamp).toTimeString().split(' ')[0];
+      const isOk = r.status === 'OK';
+      const colorClass = isOk ? 'log-ok' : 'log-err';
+
+      const line = document.createElement('div');
+      line.className = 'log-line';
+      line.innerHTML = `<span class="log-time">[${timeStr}]</span> <span class="${colorClass}">[${r.status}]</span> ${r.deviceName} Func=0x0${r.functionCode} Addr=${r.address} -> [${r.valuesStr || ''}] (${r.latencyMs.toFixed(1)}ms)`;
+      term.appendChild(line);
+
+      // Keep max 100 lines
+      while (term.children.length > 100) {
+        term.removeChild(term.firstChild);
+      }
+      term.scrollTop = term.scrollHeight;
+      document.getElementById('log-count').innerText = `${term.children.length} 行`;
+    }
+
+    // Fault Injection API
+    async function injectFault(type) {
+      const toast = document.getElementById('fault-toast');
+      toast.innerText = `正在向从站注入场景: ${type}...`;
+      try {
+        const resp = await fetch('/api/fault', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type })
+        });
+        const data = await resp.json();
+        toast.innerText = `>>> ${data.message}`;
+        setTimeout(() => toast.innerText = '', 4000);
+      } catch (e) {
+        toast.innerText = `注入失败: ${e}`;
+      }
+    }
+
+    // Manual Register Write
+    async function writeRegister() {
+      const addr = document.getElementById('write-addr').value;
+      const val = document.getElementById('write-val').value;
+      const resDiv = document.getElementById('write-result');
+      resDiv.innerText = `下发指令至地址 ${addr} = ${val}...`;
+
+      try {
+        const resp = await fetch('/api/write', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ address: parseInt(addr), value: parseInt(val) })
+        });
+        const data = await resp.json();
+        resDiv.innerText = `>>> 写入成功! 从站回显: ${JSON.stringify(data)}`;
+        setTimeout(() => resDiv.innerText = '', 3500);
+      } catch (e) {
+        resDiv.innerText = `写入失败: ${e}`;
+      }
+    }
+
+    // Auto-refresh every 800ms
+    setInterval(fetchData, 800);
+    fetchData();
+  </script>
+</body>
+</html>
