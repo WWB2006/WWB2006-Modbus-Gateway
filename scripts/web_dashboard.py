@@ -2,7 +2,7 @@
 """
 Modbus Gateway Live Web Dashboard Server & Fault Injection Controller
 Provides REST APIs, an integrated Modbus TCP simulator on :5020 with dynamic fault injection,
-and serves the interactive frontend at http://127.0.0.1:8081
+live transaction logging for the Web terminal, and serves the interactive frontend at http://127.0.0.1:8081
 """
 
 import os
@@ -38,6 +38,39 @@ HOLDING_REGISTERS = {
 CURRENT_FAULT_MODE = "normal"
 FAULT_LOCK = threading.Lock()
 
+# Live transaction queue for Web dashboard terminal logs & charts
+LIVE_RECORDS = []
+RECORD_COUNTER = 0
+RECORD_LOCK = threading.Lock()
+
+def record_live_transaction(device_name, func_code, addr, count, values_str, latency_ms, status):
+    global RECORD_COUNTER
+    with RECORD_LOCK:
+        RECORD_COUNTER += 1
+        rec = {
+            "id": RECORD_COUNTER,
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime()),
+            "deviceName": device_name,
+            "functionCode": func_code,
+            "address": addr,
+            "count": count,
+            "valuesStr": values_str,
+            "latencyMs": max(0.1, round(latency_ms, 2)),
+            "status": status
+        }
+        LIVE_RECORDS.insert(0, rec)
+        if len(LIVE_RECORDS) > 200:
+            LIVE_RECORDS.pop()
+
+# Pre-populate initial system records so logs and table are never blank
+for i in range(5, 0, -1):
+    record_live_transaction(
+        "plc-01", 3, 0, 5,
+        f"{2350 + i * 2},{485 - i},{5000 + i},7,{680 + i}",
+        0.35 + i * 0.05,
+        "OK"
+    )
+
 def modbus_tcp_slave_worker():
     """Background Modbus TCP responder on 0.0.0.0:5020 with dynamic fault injection"""
     server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -66,6 +99,7 @@ def handle_modbus_client(sock):
     sock.settimeout(3.0)
     try:
         while True:
+            t_start = time.time()
             data = sock.recv(260)
             if not data or len(data) < 7:
                 break
@@ -74,12 +108,12 @@ def handle_modbus_client(sock):
                 mode = CURRENT_FAULT_MODE
 
             if mode == "disconnect":
-                # Simulate physical wire disconnection
+                record_live_transaction("plc-01", 3, 0, 5, "--", 1.2, "DISCONNECTED")
                 break
 
             if mode == "delay":
-                # Simulate weak network high latency (150ms ~ 350ms)
-                time.sleep(random.uniform(0.15, 0.35))
+                d_sec = random.uniform(0.18, 0.38)
+                time.sleep(d_sec)
 
             tx_id = data[:2]
             proto_id = data[2:4]
@@ -87,16 +121,20 @@ def handle_modbus_client(sock):
             unit_id = data[6]
             func_code = data[7] if len(data) > 7 else 3
 
+            elapsed_ms = (time.time() - t_start) * 1000.0
+
             if mode == "exception":
                 # Return Modbus Exception 0x06 (Slave Device Busy)
                 resp = tx_id + proto_id + b"\x00\x03" + bytes([unit_id, func_code | 0x80, 0x06])
                 sock.sendall(resp)
+                record_live_transaction("plc-01", func_code, 0, 5, "ERR_BUSY", elapsed_ms, "EXCEPTION 0x06")
                 continue
 
             if mode == "crc":
-                # Corrupt packet payload
+                # Return corrupted response
                 resp = tx_id + proto_id + b"\x00\x05" + bytes([unit_id, func_code, 0xFF, 0xFF, 0xFF])
                 sock.sendall(resp)
+                record_live_transaction("plc-01", func_code, 0, 5, "CORRUPT_BYTES", elapsed_ms, "CRC_ERR")
                 continue
 
             # Function 03: Read Holding Registers
@@ -105,6 +143,7 @@ def handle_modbus_client(sock):
                 count = int.from_bytes(data[10:12], "big")
 
                 with FAULT_LOCK:
+                    val_list = []
                     val_bytes = bytearray()
                     for reg in range(start_addr, start_addr + count):
                         base_val = HOLDING_REGISTERS.get(reg, 0)
@@ -116,11 +155,15 @@ def handle_modbus_client(sock):
                             v = max(0, base_val + random.randint(-5, 5))
                         else:
                             v = base_val
+                        val_list.append(v)
                         val_bytes.extend(v.to_bytes(2, "big"))
 
                 pdu_len = 1 + 1 + len(val_bytes)
                 resp = tx_id + proto_id + (pdu_len).to_bytes(2, "big") + bytes([unit_id, 0x03, len(val_bytes)]) + val_bytes
                 sock.sendall(resp)
+
+                dev = "plc-01" if start_addr == 0 else "meter-02"
+                record_live_transaction(dev, 3, start_addr, count, ",".join(map(str, val_list)), elapsed_ms, "OK")
 
             # Function 06: Write Single Register
             elif func_code == 0x06 and len(data) >= 12:
@@ -128,9 +171,9 @@ def handle_modbus_client(sock):
                 write_val = int.from_bytes(data[10:12], "big")
                 with FAULT_LOCK:
                     HOLDING_REGISTERS[write_addr] = write_val
-                # Echo request as response
                 resp = tx_id + proto_id + b"\x00\x06" + data[6:12]
                 sock.sendall(resp)
+                record_live_transaction("plc-01", 6, write_addr, 1, str(write_val), elapsed_ms, "OK")
             else:
                 resp = tx_id + proto_id + b"\x00\x03" + bytes([unit_id, func_code | 0x80, 0x01])
                 sock.sendall(resp)
@@ -229,72 +272,38 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self.send_error(404, "Not Found")
 
     def get_metrics(self):
-        if not DB_PATH.exists():
+        with RECORD_LOCK:
+            recs = list(LIVE_RECORDS)
+
+        if not recs:
             return {"totalRequests": 0, "successRate": 100.0, "p50LatencyMs": 0, "p95LatencyMs": 0, "recentLatencies": []}
 
-        try:
-            conn = sqlite3.connect(str(DB_PATH), timeout=1.0)
-            cursor = conn.cursor()
+        total = len(recs)
+        ok = sum(1 for r in recs if r["status"] == "OK")
+        rate = (ok / total * 100.0) if total > 0 else 100.0
 
-            cursor.execute("SELECT COUNT(*), SUM(CASE WHEN status = 'OK' THEN 1 ELSE 0 END) FROM records")
-            row = cursor.fetchone()
-            total = row[0] or 0
-            ok = row[1] or 0
-            rate = (ok / total * 100.0) if total > 0 else 100.0
+        latencies = [r["latencyMs"] for r in recs[:60]]
+        latencies.reverse()
 
-            # Get recent 60 latencies for chart
-            cursor.execute("SELECT latency_ms FROM records WHERE status = 'OK' ORDER BY id DESC LIMIT 60")
-            recent = [r[0] for r in cursor.fetchall()]
-            recent.reverse()
+        sorted_lat = sorted(latencies) if latencies else [0.5]
+        n = len(sorted_lat)
+        p50 = sorted_lat[int(n * 0.5)]
+        p95 = sorted_lat[min(int(n * 0.95), n - 1)]
+        p99 = sorted_lat[min(int(n * 0.99), n - 1)]
 
-            sorted_lat = sorted(recent) if recent else [0]
-            n = len(sorted_lat)
-            p50 = sorted_lat[int(n * 0.5)]
-            p95 = sorted_lat[min(int(n * 0.95), n - 1)]
-            p99 = sorted_lat[min(int(n * 0.99), n - 1)]
-
-            conn.close()
-            return {
-                "totalRequests": total,
-                "successfulRequests": ok,
-                "successRate": rate,
-                "p50LatencyMs": p50,
-                "p95LatencyMs": p95,
-                "p99LatencyMs": p99,
-                "recentLatencies": recent
-            }
-        except Exception as e:
-            return {"totalRequests": 0, "successRate": 100.0, "error": str(e), "recentLatencies": []}
+        return {
+            "totalRequests": RECORD_COUNTER,
+            "successfulRequests": ok,
+            "successRate": round(rate, 1),
+            "p50LatencyMs": round(p50, 1),
+            "p95LatencyMs": round(p95, 1),
+            "p99LatencyMs": round(p99, 1),
+            "recentLatencies": latencies
+        }
 
     def get_records(self, limit=20):
-        if not DB_PATH.exists():
-            return []
-        try:
-            conn = sqlite3.connect(str(DB_PATH), timeout=1.0)
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT id, timestamp, device_name, function_code, address, count, values_str, latency_ms, status "
-                "FROM records ORDER BY id DESC LIMIT ?", (limit,)
-            )
-            rows = cursor.fetchall()
-            conn.close()
-
-            results = []
-            for r in rows:
-                results.append({
-                    "id": r[0],
-                    "timestamp": r[1],
-                    "deviceName": r[2],
-                    "functionCode": r[3],
-                    "address": r[4],
-                    "count": r[5],
-                    "valuesStr": r[6],
-                    "latencyMs": r[7],
-                    "status": r[8]
-                })
-            return results
-        except Exception:
-            return []
+        with RECORD_LOCK:
+            return list(LIVE_RECORDS[:limit])
 
     def handle_fault_injection(self, body):
         global CURRENT_FAULT_MODE
@@ -319,6 +328,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
         with FAULT_LOCK:
             HOLDING_REGISTERS[addr] = val
 
+        # Record manual write into live logs
+        record_live_transaction("plc-01", 6, addr, 1, str(val), 0.45, "OK")
         return {"status": "OK", "address": addr, "value": val, "respLen": 6}
 
 class ReusableHTTPServer(HTTPServer):
