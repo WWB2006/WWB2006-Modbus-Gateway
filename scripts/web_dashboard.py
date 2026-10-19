@@ -158,7 +158,7 @@ def handle_modbus_client(sock):
                         val_list.append(v)
                         val_bytes.extend(v.to_bytes(2, "big"))
 
-                pdu_len = 1 + 1 + len(val_bytes)
+                pdu_len = 1 + 1 + 1 + len(val_bytes)
                 resp = tx_id + proto_id + (pdu_len).to_bytes(2, "big") + bytes([unit_id, 0x03, len(val_bytes)]) + val_bytes
                 sock.sendall(resp)
 
