@@ -75,8 +75,14 @@ def wait_for_port(host, port, timeout=10.0):
 
 
 def executable(build_dir, name):
-    """Windows 上是 name.exe，类 Unix 上是 name。返回存在的那个路径。"""
-    for candidate in (os.path.join(build_dir, name + ".exe"), os.path.join(build_dir, name)):
+    """Windows 上是 name.exe，类 Unix 上是 name。自动兼容 build 根目录与 build/src 子目录。"""
+    candidates = [
+        os.path.join(build_dir, name + ".exe"),
+        os.path.join(build_dir, name),
+        os.path.join(build_dir, "src", name + ".exe"),
+        os.path.join(build_dir, "src", name),
+    ]
+    for candidate in candidates:
         if os.path.isfile(candidate):
             return candidate
     return None
