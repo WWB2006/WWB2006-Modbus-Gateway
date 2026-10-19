@@ -332,6 +332,29 @@ class DashboardHandler(BaseHTTPRequestHandler):
         record_live_transaction("plc-01", 6, addr, 1, str(val), 0.45, "OK")
         return {"status": "OK", "address": addr, "value": val, "respLen": 6}
 
+def auto_poll_worker():
+    """Lightweight auto-polling thread: queries port 5020 with Function 03 every 1.2s.
+    Guarantees continuous live telemetry logs and real-time fault waveform response
+    on the dashboard even if the external C++ gateway daemon isn't running yet."""
+    time.sleep(1.0)
+    tx_id = 100
+    while True:
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(2.0)
+            s.connect(("127.0.0.1", 5020))
+            while True:
+                tx_id = (tx_id + 1) % 65535
+                # Function 03: Read holding registers 0..4 (Unit 1)
+                req = tx_id.to_bytes(2, "big") + b"\x00\x00\x00\x06\x01\x03\x00\x00\x00\x05"
+                s.sendall(req)
+                resp = s.recv(260)
+                if not resp:
+                    break
+                time.sleep(1.2)
+        except Exception:
+            time.sleep(1.5)
+
 class ReusableHTTPServer(HTTPServer):
     allow_reuse_address = True
 
@@ -343,6 +366,8 @@ def main():
 
     # Start background Modbus TCP slave on 5020 with fault injector
     threading.Thread(target=modbus_tcp_slave_worker, daemon=True).start()
+    # Start background auto-poller to keep live logs and waveforms streaming
+    threading.Thread(target=auto_poll_worker, daemon=True).start()
     time.sleep(0.2)
 
     port = args.port

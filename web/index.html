@@ -297,9 +297,9 @@
   <!-- 三项目协同快速导航 -->
   <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; align-items: center;">
     <span style="font-size: 13px; color: var(--text-muted);">🚀 工业协同项目集群：</span>
-    <a href="http://127.0.0.1:8080" target="_blank" style="padding: 6px 14px; border-radius: 8px; text-decoration: none; font-size: 13px; background: var(--card-bg); color: #7dd3fc; border: 1px solid var(--panel-border); transition: all 0.2s;">🌐 项目一：Reactor Web 服务 (:8080)</a>
+    <a id="nav-proj1" href="http://127.0.0.1:8080" target="_blank" style="padding: 6px 14px; border-radius: 8px; text-decoration: none; font-size: 13px; background: var(--card-bg); color: #7dd3fc; border: 1px solid var(--panel-border); transition: all 0.2s;">🌐 项目一：Reactor Web 服务 (:8080)</a>
     <a href="/" style="padding: 6px 14px; border-radius: 8px; text-decoration: none; font-size: 13px; background: #222e42; color: #00d2ff; border: 1px solid #0088ff; font-weight: 600;">📡 项目二：Modbus 工业网关看板 (:8081)</a>
-    <a href="http://127.0.0.1:8000" target="_blank" style="padding: 6px 14px; border-radius: 8px; text-decoration: none; font-size: 13px; background: var(--card-bg); color: #fbbf24; border: 1px solid var(--panel-border); transition: all 0.2s;">📊 项目三：设备数据采集与测试报告平台 (:8000)</a>
+    <a id="nav-proj3" href="http://127.0.0.1:8000" target="_blank" style="padding: 6px 14px; border-radius: 8px; text-decoration: none; font-size: 13px; background: var(--card-bg); color: #fbbf24; border: 1px solid var(--panel-border); transition: all 0.2s;">📊 项目三：设备数据采集与测试报告平台 (:8000)</a>
   </div>
 
   <!-- KPI Top Row -->
@@ -668,6 +668,13 @@
         resDiv.innerText = `写入失败: ${e}`;
       }
     }
+
+    // Dynamically bind project switching links based on current hostname
+    const curHost = window.location.hostname || '127.0.0.1';
+    const linkP1 = document.getElementById('nav-proj1');
+    const linkP3 = document.getElementById('nav-proj3');
+    if (linkP1) linkP1.href = `http://${curHost}:8080`;
+    if (linkP3) linkP3.href = `http://${curHost}:8000`;
 
     // Auto-refresh every 800ms
     setInterval(fetchData, 800);
