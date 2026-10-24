@@ -264,6 +264,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.send_json(res)
             return
 
+        if path == "/api/voltage":
+            res = self.handle_set_voltage(body)
+            self.send_json(res)
+            return
+
         if path == "/api/write":
             res = self.handle_manual_write(body)
             self.send_json(res)
@@ -298,7 +303,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
             "p50LatencyMs": round(p50, 1),
             "p95LatencyMs": round(p95, 1),
             "p99LatencyMs": round(p99, 1),
-            "recentLatencies": latencies
+            "recentLatencies": latencies,
+            "faultMode": CURRENT_FAULT_MODE,
+            "holdingRegisters": dict(HOLDING_REGISTERS)
         }
 
     def get_records(self, limit=20):
@@ -316,10 +323,38 @@ class DashboardHandler(BaseHTTPRequestHandler):
             "delay": "已注入弱网延时场景 (150~350ms 波动，波形图将出现高延迟尖刺)",
             "crc": "已注入数据损坏 (触发网关校验失败与重试，成功率下降)",
             "exception": "已注入从站忙异常码 (0x06 异常响应，触发指数退避)",
-            "disconnect": "已注入物理断线 (模拟 TCP 链路断开重连)",
+            "disconnect": "已注入物理断线 (模拟 TCP 链路断开与重连)",
             "normal": "已恢复标准无故障运行模式 (延迟 < 1ms，成功率 100%)"
         }
-        return {"status": "OK", "message": msg_map.get(fault_type, "已生效")}
+        return {"status": "OK", "faultMode": fault_type, "message": msg_map.get(fault_type, "已生效")}
+
+    def handle_set_voltage(self, body):
+        """专门用于给予电压 / 供电控制 (Modbus Function 06 写入保持寄存器 0)"""
+        if "voltage" in body:
+            voltage_f = float(body["voltage"])
+            reg_val = max(0, min(65535, int(round(voltage_f * 10))))
+        else:
+            reg_val = max(0, min(65535, int(body.get("value", 2200))))
+            voltage_f = round(reg_val / 10.0, 1)
+
+        with FAULT_LOCK:
+            HOLDING_REGISTERS[0] = reg_val
+            if reg_val == 0:
+                HOLDING_REGISTERS[1] = 0   # 0.00 A
+                HOLDING_REGISTERS[2] = 0   # 0.00 Hz
+            else:
+                calc_curr = round((voltage_f / 220.0) * 485)
+                HOLDING_REGISTERS[1] = max(10, calc_curr)
+                HOLDING_REGISTERS[2] = 5000 + random.randint(-4, 4)
+
+        # 记录 06 写入交易进入实时监控队列
+        record_live_transaction("plc-01", 6, 0, 1, str(reg_val), 0.42, "OK")
+        return {
+            "status": "OK",
+            "voltage": voltage_f,
+            "regValue": reg_val,
+            "message": f"成功下发供电电压: {voltage_f} V (Modbus 06 写入 Reg 0 = {reg_val})"
+        }
 
     def handle_manual_write(self, body):
         addr = int(body.get("address", 0))
@@ -327,6 +362,13 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
         with FAULT_LOCK:
             HOLDING_REGISTERS[addr] = val
+            if addr == 0:
+                if val == 0:
+                    HOLDING_REGISTERS[1] = 0
+                    HOLDING_REGISTERS[2] = 0
+                else:
+                    HOLDING_REGISTERS[1] = max(10, round((val / 2200.0) * 485))
+                    HOLDING_REGISTERS[2] = 5000
 
         # Record manual write into live logs
         record_live_transaction("plc-01", 6, addr, 1, str(val), 0.45, "OK")
@@ -339,11 +381,26 @@ def auto_poll_worker():
     time.sleep(1.0)
     tx_id = 100
     while True:
+        with FAULT_LOCK:
+            mode = CURRENT_FAULT_MODE
+
+        # 物理断线故障激活时，平稳模拟超时记录，避免疯狂重连
+        if mode == "disconnect":
+            record_live_transaction("plc-01", 3, 0, 5, "--", 1500.0, "DISCONNECTED")
+            time.sleep(1.2)
+            continue
+
+        s = None
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(2.0)
+            s.settimeout(2.5)
             s.connect(("127.0.0.1", 5020))
             while True:
+                with FAULT_LOCK:
+                    m = CURRENT_FAULT_MODE
+                if m == "disconnect":
+                    break
+
                 tx_id = (tx_id + 1) % 65535
                 # Function 03: Read holding registers 0..4 (Unit 1)
                 req = tx_id.to_bytes(2, "big") + b"\x00\x00\x00\x06\x01\x03\x00\x00\x00\x05"
@@ -353,7 +410,14 @@ def auto_poll_worker():
                     break
                 time.sleep(1.2)
         except Exception:
-            time.sleep(1.5)
+            time.sleep(1.2)
+        finally:
+            if s:
+                try:
+                    s.close()
+                except Exception:
+                    pass
+        time.sleep(1.2)
 
 class ReusableHTTPServer(HTTPServer):
     allow_reuse_address = True

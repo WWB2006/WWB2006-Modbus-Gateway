@@ -381,39 +381,60 @@
     </div>
   </div>
 
-  <!-- Row 3: Fault Injection Control Center & Manual Point Write -->
-  <div class="grid-2-1">
+  <!-- Row 3: Fault Injection Control Center & Voltage Regulation -->
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
     <!-- Fault Injection Panel -->
-    <div class="card">
+    <div class="card" style="border: 1px solid var(--panel-border);">
       <div class="card-header">
         <span>工业异常注入控制台 (Fault Injection Engine)</span>
-        <span style="color: var(--accent-amber); font-size: 11px;">点击实时注入仿真故障</span>
+        <span class="status-pill status-ok" id="fault-badge">当前模式: 正常运行</span>
       </div>
-      <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">
-        通过模拟器动态注入现场恶劣工况，验证网关超时重连与退避算法，观察延迟波形变化：
+      <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
+        通过模拟器动态注入现场恶劣工况，验证网关超时重连与退避算法，观察延迟波形与遥测变化：
       </p>
       <div class="btn-row">
-        <button class="btn btn-amber" onclick="injectFault('delay')">⚡ 注入弱网延迟 (50-400ms)</button>
-        <button class="btn btn-red" onclick="injectFault('crc')">💥 注入 CRC 校验损坏 (20%)</button>
-        <button class="btn btn-purple" onclick="injectFault('exception')">⚠️ 注入从站忙异常码 (0x06)</button>
-        <button class="btn btn-red" onclick="injectFault('disconnect')">🔌 模拟网线拔出断网 (3s)</button>
-        <button class="btn btn-green" onclick="injectFault('normal')">✅ 恢复正常模式</button>
+        <button class="btn btn-amber" id="btn-fault-delay" onclick="injectFault('delay')">⚡ 弱网延迟 (150-350ms)</button>
+        <button class="btn btn-red" id="btn-fault-crc" onclick="injectFault('crc')">💥 CRC 校验损坏 (20%)</button>
+        <button class="btn btn-purple" id="btn-fault-exception" onclick="injectFault('exception')">⚠️ 从站忙异常码 (0x06)</button>
+        <button class="btn btn-red" id="btn-fault-disconnect" onclick="injectFault('disconnect')">🔌 物理网线拔出断网</button>
+        <button class="btn btn-green" id="btn-fault-normal" onclick="injectFault('normal')">✅ 恢复正常运行</button>
       </div>
-      <div id="fault-toast" style="font-size: 12px; color: var(--accent-cyan); margin-top: 10px; min-height: 18px;"></div>
+      <div id="fault-toast" style="font-size: 12px; color: var(--accent-cyan); margin-top: 10px; min-height: 18px; font-weight: 500;"></div>
     </div>
 
-    <!-- Manual Write -->
-    <div class="card">
+    <!-- Voltage Supply & Regulation Panel -->
+    <div class="card" style="border: 1px solid rgba(0, 136, 255, 0.4); background: linear-gradient(180deg, #161d2a 0%, #131a26 100%);">
       <div class="card-header">
-        <span>点位手动下发 (Function 06)</span>
-        <span style="font-size: 11px; color: var(--text-muted);">Write Single Register</span>
+        <span style="color: #38bdf8; font-weight: 700;">⚡ 三相母线电压调节与给予控制 (Voltage Supply)</span>
+        <span class="status-pill status-ok" id="voltage-status-pill">供电正常</span>
       </div>
-      <div class="form-row">
-        <input type="number" id="write-addr" value="0" min="0" max="9999" placeholder="寄存器地址" style="width: 100px;">
-        <input type="number" id="write-val" value="380" min="0" max="65535" placeholder="写入数值" style="width: 110px;">
-        <button class="btn btn-blue" onclick="writeRegister()">写入 (06)</button>
+      <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">
+        通过 Modbus Function 06 动态调节从站工作电压（保持寄存器 0），实时联动电流与电网频率：
+      </p>
+      <!-- Preset Voltage Quick Buttons -->
+      <div class="btn-row" style="margin-bottom: 12px;">
+        <button class="btn btn-blue" onclick="setVoltagePreset(220.0)">⚡ 给予 220V (市电)</button>
+        <button class="btn btn-blue" onclick="setVoltagePreset(380.0)">⚡ 给予 380V (动力电)</button>
+        <button class="btn btn-amber" onclick="setVoltagePreset(240.0)">⚡ 给予 240V (高压)</button>
+        <button class="btn btn-purple" onclick="setVoltagePreset(110.0)">⚡ 给予 110V (低压)</button>
+        <button class="btn btn-red" onclick="setVoltagePreset(0.0)">🛑 给予 0V (切断供电)</button>
       </div>
-      <div id="write-result" style="font-size: 11px; margin-top: 8px; color: var(--accent-green);"></div>
+      <!-- Custom Voltage Input & Generic Write -->
+      <div class="form-row" style="background: var(--card-bg); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--panel-border); display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span style="font-size: 12px; color: var(--text);">设定电压:</span>
+          <input type="number" id="voltage-input" value="220.0" step="0.5" min="0" max="650" style="width: 80px; font-weight: bold; font-family: Consolas;">
+          <span style="font-size: 12px; color: var(--text-muted);">V</span>
+          <button class="btn btn-green" onclick="submitCustomVoltage()" style="padding: 6px 12px;">⚡ 立即给予电压 (06)</button>
+        </div>
+        <div style="display: flex; align-items: center; gap: 4px;">
+          <span style="font-size: 11px; color: var(--text-muted);">点位06:</span>
+          <input type="number" id="write-addr" value="0" min="0" max="999" placeholder="地址" style="width: 50px; font-size: 11px; padding: 4px 6px;">
+          <input type="number" id="write-val" value="2200" min="0" max="65535" placeholder="值" style="width: 60px; font-size: 11px; padding: 4px 6px;">
+          <button class="btn btn-blue" onclick="writeRegister()" style="padding: 5px 8px; font-size: 11px;">下发</button>
+        </div>
+      </div>
+      <div id="voltage-toast" style="font-size: 12px; color: var(--accent-cyan); margin-top: 8px; min-height: 18px; font-weight: 500;"></div>
     </div>
   </div>
 
@@ -586,15 +607,60 @@
             </tr>`;
           }).join('');
 
-          // Update Telemetry Gauges from latest plc-01 record
-          const plcRecord = resRecords.find(r => r.deviceName === 'plc-01' && r.valuesStr);
-          if (plcRecord) {
-            const vals = plcRecord.valuesStr.split(',').map(Number);
-            if (vals.length >= 5) {
-              document.getElementById('val-voltage').innerHTML = (vals[0] / 10).toFixed(1) + ' <span style="font-size: 12px; color: var(--text-muted);">V</span>';
-              document.getElementById('val-current').innerHTML = (vals[1] / 100).toFixed(2) + ' <span style="font-size: 12px; color: var(--text-muted);">A</span>';
-              document.getElementById('val-freq').innerHTML = (vals[2] / 100).toFixed(2) + ' <span style="font-size: 12px; color: var(--text-muted);">Hz</span>';
-              document.getElementById('val-temp').innerHTML = vals[4].toFixed(1) + ' <span style="font-size: 12px; color: var(--text-muted);">°C</span>';
+          // Update Status & Fault Modes
+          const faultMode = resMetrics.faultMode || 'normal';
+          const badge = document.getElementById('fault-badge');
+          const gwStatus = document.getElementById('gw-status');
+          if (faultMode === 'disconnect') {
+            if (badge) { badge.className = 'status-pill status-err'; badge.innerHTML = '当前模式: 物理断线'; }
+            if (gwStatus) { gwStatus.className = 'status-pill status-err'; gwStatus.innerHTML = 'DISCONNECTED'; }
+          } else if (faultMode === 'crc') {
+            if (badge) { badge.className = 'status-pill status-err'; badge.innerHTML = '当前模式: CRC 校验损坏'; }
+            if (gwStatus) { gwStatus.className = 'status-pill status-err'; gwStatus.innerHTML = 'CRC ERROR'; }
+          } else if (faultMode === 'exception') {
+            if (badge) { badge.className = 'status-pill status-warn'; badge.innerHTML = '当前模式: 从站忙 0x06'; }
+            if (gwStatus) { gwStatus.className = 'status-pill status-warn'; gwStatus.innerHTML = 'BUSY 0x06'; }
+          } else if (faultMode === 'delay') {
+            if (badge) { badge.className = 'status-pill status-warn'; badge.innerHTML = '当前模式: 弱网高延迟'; }
+            if (gwStatus) { gwStatus.className = 'status-pill status-warn'; gwStatus.innerHTML = 'HIGH LATENCY'; }
+          } else {
+            if (badge) { badge.className = 'status-pill status-ok'; badge.innerHTML = '<span class="pulse-dot"></span> 当前模式: 正常运行'; }
+            if (gwStatus) { gwStatus.className = 'status-pill status-ok'; gwStatus.innerHTML = 'ONLINE'; }
+          }
+
+          // Update Telemetry Gauges from registers or latest plc-01 record
+          if (faultMode === 'disconnect') {
+            document.getElementById('val-voltage').innerHTML = '<span style="color: var(--accent-red);">0.0</span> <span style="font-size: 12px; color: var(--accent-red);">V (断线)</span>';
+            document.getElementById('val-current').innerHTML = '<span style="color: var(--accent-red);">0.00</span> <span style="font-size: 12px; color: var(--accent-red);">A</span>';
+            document.getElementById('val-freq').innerHTML = '<span style="color: var(--accent-red);">0.00</span> <span style="font-size: 12px; color: var(--accent-red);">Hz</span>';
+            const vPill = document.getElementById('voltage-status-pill');
+            if (vPill) { vPill.className = 'status-pill status-err'; vPill.innerText = '物理断开 (OFFLINE)'; }
+          } else {
+            const regMap = resMetrics.holdingRegisters || {};
+            const reg0 = regMap[0] !== undefined ? regMap[0] : 2200;
+            const reg1 = regMap[1] !== undefined ? regMap[1] : 485;
+            const reg2 = regMap[2] !== undefined ? regMap[2] : 5000;
+            const reg4 = regMap[4] !== undefined ? regMap[4] : 680;
+
+            const volt = (reg0 / 10).toFixed(1);
+            const curr = (reg1 / 100).toFixed(2);
+            const freq = (reg2 / 100).toFixed(2);
+            const temp = (reg4 / 10).toFixed(1);
+
+            document.getElementById('val-voltage').innerHTML = volt + ' <span style="font-size: 12px; color: var(--text-muted);">V</span>';
+            document.getElementById('val-current').innerHTML = curr + ' <span style="font-size: 12px; color: var(--text-muted);">A</span>';
+            document.getElementById('val-freq').innerHTML = freq + ' <span style="font-size: 12px; color: var(--text-muted);">Hz</span>';
+            document.getElementById('val-temp').innerHTML = temp + ' <span style="font-size: 12px; color: var(--text-muted);">°C</span>';
+
+            const vPill = document.getElementById('voltage-status-pill');
+            if (vPill) {
+              if (reg0 === 0) {
+                vPill.className = 'status-pill status-warn';
+                vPill.innerText = '已切断供电 (0V)';
+              } else {
+                vPill.className = 'status-pill status-ok';
+                vPill.innerText = `供电正常 (${volt}V)`;
+              }
             }
           }
 
@@ -642,17 +708,43 @@
         });
         const data = await resp.json();
         toast.innerText = `>>> ${data.message}`;
+        fetchData();
         setTimeout(() => toast.innerText = '', 4000);
       } catch (e) {
         toast.innerText = `注入失败: ${e}`;
       }
     }
 
+    // Voltage Regulation API (Function 06)
+    async function setVoltagePreset(v) {
+      document.getElementById('voltage-input').value = Number(v).toFixed(1);
+      const toast = document.getElementById('voltage-toast');
+      toast.innerText = `正在下发供电电压 ${v} V (Function 06 写入保持寄存器 0)...`;
+      try {
+        const resp = await fetch('/api/voltage', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ voltage: Number(v) })
+        });
+        const data = await resp.json();
+        toast.innerText = `>>> [下发成功] ${data.message}`;
+        fetchData();
+        setTimeout(() => toast.innerText = '', 4000);
+      } catch (e) {
+        toast.innerText = `[下发失败] ${e}`;
+      }
+    }
+
+    function submitCustomVoltage() {
+      const v = parseFloat(document.getElementById('voltage-input').value) || 0;
+      setVoltagePreset(v);
+    }
+
     // Manual Register Write
     async function writeRegister() {
       const addr = document.getElementById('write-addr').value;
       const val = document.getElementById('write-val').value;
-      const resDiv = document.getElementById('write-result');
+      const resDiv = document.getElementById('voltage-toast');
       resDiv.innerText = `下发指令至地址 ${addr} = ${val}...`;
 
       try {
@@ -663,6 +755,7 @@
         });
         const data = await resp.json();
         resDiv.innerText = `>>> 写入成功! 从站回显: ${JSON.stringify(data)}`;
+        fetchData();
         setTimeout(() => resDiv.innerText = '', 3500);
       } catch (e) {
         resDiv.innerText = `写入失败: ${e}`;
