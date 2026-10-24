@@ -1,0 +1,6 @@
+{
+  "name": "crc-error-fault",
+  "crcError": {
+    "ratio": 0.2
+  }
+}
